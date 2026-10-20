@@ -9,7 +9,7 @@ import { ProjectForm } from './Projects.jsx';
 
 export default function ProjectDetail() {
   const { id } = useParams();
-  const { version, refresh, meta, roleLabel, notify } = useApp();
+  const { version, refresh, roleLabel, notify, t, projectStatusLabel } = useApp();
   const { create } = useTaskDialog();
   const navigate = useNavigate();
   const [project, setProject] = useState(null);
@@ -34,15 +34,15 @@ export default function ProjectDetail() {
     return (
       <div className="page">
         <div className="alert error">{error}</div>
-        <Link to="/projects">← Back to projects</Link>
+        <Link to="/projects">{t('proj.back')}</Link>
       </div>
     );
-  if (!project) return <div className="muted">Loading…</div>;
+  if (!project) return <div className="muted">{t('common.loading')}</div>;
 
   const remove = async () => {
-    if (!confirm(`Delete project "${project.name}"? Its tasks will be kept but unlinked.`)) return;
+    if (!confirm(t('proj.confirmDelete', { name: project.name }))) return;
     await api.del(`/projects/${project.id}`);
-    notify('Project deleted');
+    notify(t('proj.deleted'));
     refresh();
     navigate('/projects');
   };
@@ -50,7 +50,7 @@ export default function ProjectDetail() {
   return (
     <div className="page">
       <Link to="/projects" className="muted sm">
-        ← Projects
+        {t('proj.back')}
       </Link>
       <div className="page-head">
         <div>
@@ -59,24 +59,24 @@ export default function ProjectDetail() {
           </h1>
           <div className="row gap wrap sm">
             <DeptTag department={project.department} />
-            <span className={`pill pstatus-${project.status}`}>{meta.projectStatuses.find((s) => s.key === project.status)?.label}</span>
-            <span className="muted">Owner: {project.owner_name}</span>
-            {project.due_date && <span className="muted">Due {formatDate(project.due_date)}</span>}
+            <span className={`pill pstatus-${project.status}`}>{projectStatusLabel(project.status)}</span>
+            <span className="muted">{t('proj.ownerName', { name: project.owner_name })}</span>
+            {project.due_date && <span className="muted">{t('proj.dueOn', { date: formatDate(project.due_date) })}</span>}
           </div>
         </div>
         <div className="row gap">
           {project.can_manage && (
             <>
               <button className="btn" onClick={() => setEditing(true)}>
-                Edit
+                {t('common.edit')}
               </button>
               <button className="btn danger" onClick={remove}>
-                Delete
+                {t('common.delete')}
               </button>
             </>
           )}
           <button className="btn primary" onClick={() => create({ project_id: project.id })}>
-            + Task
+            {t('proj.addTask')}
           </button>
         </div>
       </div>
@@ -86,8 +86,8 @@ export default function ProjectDetail() {
         <div className="grow">
           <Progress value={project.done_count} total={project.task_count} color={project.color} />
           <div className="muted sm">
-            {project.done_count} of {project.task_count} tasks done
-            {project.overdue_count > 0 && <span className="text-danger"> · {project.overdue_count} overdue</span>}
+            {t('proj.tasksDone', { done: project.done_count, total: project.task_count })}
+            {project.overdue_count > 0 && <span className="text-danger"> · {t('proj.overdue', { n: project.overdue_count })}</span>}
           </div>
         </div>
         <div className="avatars">
@@ -101,13 +101,13 @@ export default function ProjectDetail() {
         <TaskFilters filters={filters} setFilters={setFilters} people={project.members} showScope={false} />
         <div className="seg">
           <button className={view === 'board' ? 'active' : ''} onClick={() => setView('board')}>
-            Board
+            {t('tasks.board')}
           </button>
           <button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>
-            List
+            {t('tasks.list')}
           </button>
           <button className={view === 'activity' ? 'active' : ''} onClick={() => setView('activity')}>
-            Activity
+            {t('task.activity')}
           </button>
         </div>
       </div>
@@ -119,7 +119,7 @@ export default function ProjectDetail() {
           {project.activity.map((a) => (
             <li key={a.id}>
               <strong>{a.user_name}</strong>{' '}
-              {a.action.startsWith('project_') ? <span>{a.action === 'project_created' ? 'created the project' : `set project status to ${a.detail}`}</span> : <ActivityText a={a} withTask />}{' '}
+              {a.action.startsWith('project_') ? <span>{a.action === 'project_created' ? t('act.projectCreated') : t('act.projectStatus', { status: projectStatusLabel(a.detail) })}</span> : <ActivityText a={a} withTask />}{' '}
               <small className="muted">{timeAgo(a.created_at)}</small>
             </li>
           ))}
@@ -133,7 +133,7 @@ export default function ProjectDetail() {
           onSaved={() => {
             setEditing(false);
             refresh();
-            notify('Project saved', 'success');
+            notify(t('proj.saved'), 'success');
           }}
         />
       )}

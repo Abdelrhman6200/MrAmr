@@ -7,12 +7,12 @@ import { Avatar, Modal, PriorityTag, StatusPill, TypeTag, UserSelect, isOverdue,
 function ReviewBox({ task, onDone }) {
   const [comment, setComment] = useState('');
   const [error, setError] = useState('');
-  const { notify } = useApp();
+  const { notify, t } = useApp();
   const send = async (decision) => {
     setError('');
     try {
       await api.post(`/tasks/${task.id}/review`, { decision, comment });
-      notify(decision === 'approve' ? 'Approved — task is done' : 'Sent back with changes', 'success');
+      notify(decision === 'approve' ? t('task.approved') : t('task.sentBack'), 'success');
       setComment('');
       onDone();
     } catch (e) {
@@ -21,18 +21,16 @@ function ReviewBox({ task, onDone }) {
   };
   return (
     <div className="review-box">
-      <strong>Review requested</strong>
-      <p className="muted">
-        {task.assignee_name || 'The assignee'} sent this for your review. Approve to mark it done, or request changes to send it back.
-      </p>
-      <textarea rows={2} placeholder="Feedback (required when requesting changes)" value={comment} onChange={(e) => setComment(e.target.value)} />
+      <strong>{t('task.reviewRequested')}</strong>
+      <p className="muted">{t('task.reviewExplain', { name: task.assignee_name || t('task.theAssignee') })}</p>
+      <textarea rows={2} placeholder={t('task.feedbackPh')} value={comment} onChange={(e) => setComment(e.target.value)} />
       {error && <div className="alert error">{error}</div>}
       <div className="row gap">
         <button className="btn success" onClick={() => send('approve')}>
-          ✓ Approve
+          {t('task.approve')}
         </button>
         <button className="btn warn" onClick={() => send('changes')}>
-          ↺ Request changes
+          {t('task.requestChanges')}
         </button>
       </div>
     </div>
@@ -40,7 +38,7 @@ function ReviewBox({ task, onDone }) {
 }
 
 export default function TaskDetail({ id }) {
-  const { meta, refresh, version, notify, users, user } = useApp();
+  const { meta, refresh, version, notify, users, user, t, statusLabel, priorityLabel, typeLabel } = useApp();
   const { close } = useTaskDialog();
   const [task, setTask] = useState(null);
   const [error, setError] = useState('');
@@ -54,8 +52,8 @@ export default function TaskDetail({ id }) {
   const load = useCallback(() => {
     api
       .get(`/tasks/${id}`)
-      .then((t) => {
-        setTask(t);
+      .then((data) => {
+        setTask(data);
         setError('');
       })
       .catch((e) => setError(e.message));
@@ -71,7 +69,7 @@ export default function TaskDetail({ id }) {
 
   if (error)
     return (
-      <Modal title="Task" onClose={close}>
+      <Modal title={t('nav.tasks')} onClose={close}>
         <div className="alert error">{error}</div>
       </Modal>
     );
@@ -104,9 +102,9 @@ export default function TaskDetail({ id }) {
   };
 
   const remove = async () => {
-    if (!confirm(`Delete "${task.title}"? This cannot be undone.`)) return;
+    if (!confirm(t('task.confirmDelete', { title: task.title }))) return;
     await api.del(`/tasks/${task.id}`);
-    notify('Task deleted');
+    notify(t('task.deleted'));
     close();
     refresh();
   };
@@ -117,7 +115,7 @@ export default function TaskDetail({ id }) {
   const statusOptions = meta.statuses.filter((s) => !(s.key === 'done' && task.reviewer_id && !task.can_review && task.status !== 'done'));
 
   return (
-    <Modal title={`Task #${task.id}`} onClose={close} wide>
+    <Modal title={t('task.heading', { id: task.id })} onClose={close} wide>
       <div className="task-detail">
         <div className="task-main">
           {editingTitle && !ro ? (
@@ -132,7 +130,7 @@ export default function TaskDetail({ id }) {
               onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
             />
           ) : (
-            <h3 className="task-title" onClick={() => setEditingTitle(true)} title={ro ? '' : 'Click to edit'}>
+            <h3 className="task-title" onClick={() => setEditingTitle(true)} title={ro ? '' : t('task.clickEdit')}>
               {task.title}
             </h3>
           )}
@@ -140,36 +138,36 @@ export default function TaskDetail({ id }) {
             <StatusPill status={task.status} />
             <PriorityTag priority={task.priority} />
             <TypeTag type={task.type} />
-            {isOverdue(task) && <span className="pill overdue-pill">Overdue</span>}
+            {isOverdue(task) && <span className="pill overdue-pill">{t('task.overdue')}</span>}
             {task.tags &&
-              task.tags.split(',').map((t) => (
-                <span key={t} className="tag subtle">
-                  #{t}
+              task.tags.split(',').map((tag) => (
+                <span key={tag} className="tag subtle">
+                  #{tag}
                 </span>
               ))}
           </div>
 
           {task.status === 'in_review' && task.can_review && <ReviewBox task={task} onDone={refresh} />}
           {task.status === 'in_review' && !task.can_review && (
-            <div className="alert info">Waiting for {task.reviewer_name} to review.</div>
+            <div className="alert info">{t('task.waitingFor', { name: task.reviewer_name })}</div>
           )}
 
           <section>
-            <h4>Description</h4>
+            <h4>{t('form.description')}</h4>
             <textarea
               className="desc"
               rows={4}
               disabled={ro}
               defaultValue={task.description}
               key={`d${task.id}${task.updated_at}`}
-              placeholder={ro ? 'No description' : 'Add a description…'}
+              placeholder={ro ? t('task.noDescription') : t('task.addDescription')}
               onBlur={(e) => e.target.value !== task.description && update({ description: e.target.value })}
             />
           </section>
 
           <section>
             <h4>
-              Checklist {task.checklist.length > 0 && <span className="muted">{task.checklist.filter((c) => c.done).length}/{task.checklist.length}</span>}
+              {t('tasks.checklist')} {task.checklist.length > 0 && <span className="muted">{task.checklist.filter((c) => c.done).length}/{task.checklist.length}</span>}
             </h4>
             <ul className="checklist">
               {task.checklist.map((c) => (
@@ -184,7 +182,7 @@ export default function TaskDetail({ id }) {
                     {c.text}
                   </label>
                   {!ro && (
-                    <button className="icon-btn sm" onClick={() => api.del(`/tasks/${task.id}/checklist/${c.id}`).then(refresh)} aria-label="Remove item">
+                    <button className="icon-btn sm" onClick={() => api.del(`/tasks/${task.id}/checklist/${c.id}`).then(refresh)} aria-label={t('task.removeItem')}>
                       ✕
                     </button>
                   )}
@@ -193,8 +191,8 @@ export default function TaskDetail({ id }) {
             </ul>
             {!ro && (
               <form onSubmit={addItem} className="row gap">
-                <input value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="Add an item…" />
-                <button className="btn">Add</button>
+                <input value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder={t('task.addItem')} />
+                <button className="btn">{t('common.add')}</button>
               </form>
             )}
           </section>
@@ -202,16 +200,16 @@ export default function TaskDetail({ id }) {
           <section>
             <div className="tabs">
               <button className={tab === 'comments' ? 'active' : ''} onClick={() => setTab('comments')}>
-                Comments ({task.comments.length})
+                {t('task.comments', { n: task.comments.length })}
               </button>
               <button className={tab === 'activity' ? 'active' : ''} onClick={() => setTab('activity')}>
-                Activity
+                {t('task.activity')}
               </button>
             </div>
             {tab === 'comments' ? (
               <>
                 <div className="comments">
-                  {task.comments.length === 0 && <div className="muted">No comments yet.</div>}
+                  {task.comments.length === 0 && <div className="muted">{t('task.noComments')}</div>}
                   {task.comments.map((c) => (
                     <div key={c.id} className="comment">
                       <Avatar name={c.user_name} color={c.avatar_color} size={28} />
@@ -220,7 +218,7 @@ export default function TaskDetail({ id }) {
                           <strong>{c.user_name}</strong> <small className="muted">{timeAgo(c.created_at)}</small>
                           {(c.user_id === user.id || user.role === 'ceo') && (
                             <button className="link sm" onClick={() => api.del(`/tasks/${task.id}/comments/${c.id}`).then(refresh)}>
-                              delete
+                              {t('common.delete')}
                             </button>
                           )}
                         </div>
@@ -230,9 +228,9 @@ export default function TaskDetail({ id }) {
                   ))}
                 </div>
                 <form onSubmit={addComment} className="comment-form">
-                  <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Write a comment…" />
+                  <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder={t('task.writeComment')} />
                   <button className="btn primary" disabled={!comment.trim()}>
-                    Comment
+                    {t('task.comment')}
                   </button>
                 </form>
               </>
@@ -249,42 +247,42 @@ export default function TaskDetail({ id }) {
         </div>
 
         <aside className="task-side">
-          <Field label="Status">
+          <Field label={t('form.status')}>
             <select value={task.status} disabled={ro} onChange={(e) => update({ status: e.target.value })}>
               {statusOptions.map((s) => (
                 <option key={s.key} value={s.key} disabled={s.key === 'in_review' && !task.reviewer_id}>
-                  {s.label}
+                  {statusLabel(s.key)}
                 </option>
               ))}
             </select>
           </Field>
-          <Field label="Assignee">
+          <Field label={t('form.assignee')}>
             <UserSelect users={assigneeOptions} value={task.assignee_id} disabled={ro} onChange={(v) => update({ assignee_id: v })} />
           </Field>
-          <Field label="Reviewer / QA">
-            <UserSelect users={users} value={task.reviewer_id} disabled={ro} placeholder="No review needed" onChange={(v) => update({ reviewer_id: v })} />
+          <Field label={t('form.reviewer')}>
+            <UserSelect users={users} value={task.reviewer_id} disabled={ro} placeholder={t('form.noReview')} onChange={(v) => update({ reviewer_id: v })} />
           </Field>
-          <Field label="Priority">
+          <Field label={t('form.priority')}>
             <select value={task.priority} disabled={ro} onChange={(e) => update({ priority: e.target.value })}>
               {meta.priorities.map((p) => (
                 <option key={p.key} value={p.key}>
-                  {p.label}
+                  {priorityLabel(p.key)}
                 </option>
               ))}
             </select>
           </Field>
-          <Field label="Type">
+          <Field label={t('form.type')}>
             <select value={task.type} disabled={ro} onChange={(e) => update({ type: e.target.value })}>
-              {meta.taskTypes.map((t) => (
-                <option key={t.key} value={t.key}>
-                  {t.label}
+              {meta.taskTypes.map((x) => (
+                <option key={x.key} value={x.key}>
+                  {typeLabel(x.key)}
                 </option>
               ))}
             </select>
           </Field>
-          <Field label="Project">
+          <Field label={t('form.project')}>
             <select value={task.project_id ?? ''} disabled={ro} onChange={(e) => update({ project_id: e.target.value ? Number(e.target.value) : null })}>
-              <option value="">No project</option>
+              <option value="">{t('filter.noProject')}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -294,14 +292,14 @@ export default function TaskDetail({ id }) {
             </select>
             {task.project_id && (
               <Link className="link sm" to={`/projects/${task.project_id}`} onClick={close}>
-                Open project →
+                {t('task.openProject')}
               </Link>
             )}
           </Field>
-          <Field label="Due date">
+          <Field label={t('form.due')}>
             <input type="date" value={task.due_date || ''} disabled={ro} onChange={(e) => update({ due_date: e.target.value })} />
           </Field>
-          <Field label="Estimate (h)">
+          <Field label={t('task.estimate')}>
             <input
               type="number"
               min="0"
@@ -312,24 +310,24 @@ export default function TaskDetail({ id }) {
               onBlur={(e) => String(task.estimate_hours ?? '') !== e.target.value && update({ estimate_hours: e.target.value })}
             />
           </Field>
-          <Field label="Tags">
+          <Field label={t('form.tags')}>
             <input
               defaultValue={task.tags}
               key={`t${task.updated_at}`}
               disabled={ro}
-              placeholder="comma, separated"
+              placeholder={t('task.tagsPh')}
               onBlur={(e) => e.target.value !== task.tags && update({ tags: e.target.value })}
             />
           </Field>
           <div className="meta-lines muted">
-            <div>Created by {task.reporter_name}</div>
+            <div>{t('task.createdBy', { name: task.reporter_name })}</div>
             <div>{timeAgo(task.created_at)}</div>
-            {task.completed_at && <div>Completed {timeAgo(task.completed_at)}</div>}
+            {task.completed_at && <div>{t('task.completedAgo', { when: timeAgo(task.completed_at) })}</div>}
           </div>
-          {ro && <div className="alert info sm">You can view and comment on this task, but not edit it.</div>}
+          {ro && <div className="alert info sm">{t('task.readOnly')}</div>}
           {task.can_delete && (
             <button className="btn danger block" onClick={remove}>
-              Delete task
+              {t('task.delete')}
             </button>
           )}
         </aside>
@@ -347,24 +345,20 @@ function Field({ label, children }) {
   );
 }
 
-const ACTIONS = {
-  created: 'created the task',
-  status: 'changed status',
-  assigned: 'assigned to',
-  reviewer: 'set reviewer to',
-  updated: 'updated',
-  approved: 'approved the task',
-  changes_requested: 'requested changes',
-};
+const ACTIONS = ['created', 'status', 'assigned', 'reviewer', 'updated', 'approved', 'changes_requested'];
 
 export function ActivityText({ a, withTask }) {
+  const { t, statusLabel, dir } = useApp();
+  let detail = a.detail;
+  // Status changes are stored as "todo→done" keys (older rows hold English labels).
+  if (a.action === 'status' && detail?.includes('→')) detail = detail.split('→').map((s) => statusLabel(s.trim())).join(dir === 'rtl' ? ' ← ' : ' → ');
   return (
     <span>
-      {ACTIONS[a.action] || a.action} {a.action !== 'changes_requested' && a.action !== 'created' && a.detail && <em>{a.detail}</em>}
+      {ACTIONS.includes(a.action) ? t(`act.${a.action}`) : a.action} {a.action !== 'changes_requested' && a.action !== 'created' && detail && <em>{detail}</em>}
       {withTask && a.task_title && (
         <>
           {' '}
-          on <b>{a.task_title}</b>
+          {t('act.on')} <b>{a.task_title}</b>
         </>
       )}
     </span>

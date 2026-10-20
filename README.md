@@ -61,6 +61,8 @@ This is only the demo setup. The real hierarchy is data: the Head of Company or 
 - **Task details**: inline editing, a checklist, comments, an activity log, tags, estimates and due dates.
 - **Review / QA workflow**: give a task a reviewer (for example Content Quality on an instructor's lesson). The assignee moves it to *In Review*. Only the reviewer, or someone above the reviewer, can **Approve** it (the task becomes Done) or **Request changes** (the task goes back to In Progress with the feedback). Nobody can skip the review and mark the task done directly.
 - **Projects**: grouped by department, with owners, members, progress, overdue counts, a board/list/activity view and a status (planning → active → on hold → completed → archived).
+- **Calls (Customer Service)**: upload an Excel (`.xlsx`) or CSV sheet of students or customers. The app guesses which columns hold the name, phone and email, recognising English and Arabic headings, and keeps every other column. The Head of Customer Service can split the calls evenly between chosen agents (whoever has the fewest open calls gets theirs first), assign selected rows, or reassign single calls. Agents work through their own **My calls** queue: tap to dial, then log *Reached*, *No answer*, *Call back later* (at a set time), *Not interested* or *Wrong number*, with a note. Each list shows progress per agent and per outcome and can be exported back to CSV with the results.
+- **English and Arabic**: switch language from the top bar, the login screen or your profile. Arabic flips the whole layout right-to-left. The choice is saved to your account.
 - **Calendar**: a month view of due dates for you, your team or everything you can see. Double-click a day to create a task due that day.
 - **Team**: a collapsible org chart and a by-department directory.
 - **Reports**: completion by department, status and priority breakdowns, weekly created-vs-completed throughput, and project health.
@@ -78,6 +80,7 @@ These rules are in `server/src/access.js`.
 | **Edit tasks** | The assignee, creator, reviewer, their managers, or the project owner. |
 | **Approve reviews** | The reviewer, their managers, or the Head of Company. |
 | **Create projects** | Managers and the Head of Company. |
+| **Calls** | Only the Customer Service team and the Head of Company. Agents can upload lists, claim unassigned calls and log their own calls. The Head of Customer Service (or the Head of Company) assigns and reassigns calls to anyone. |
 | **Manage users** | The Head of Company and the Operations Manager. Only the Head of Company can create or edit Head of Company accounts. |
 
 ## Project layout
@@ -89,12 +92,15 @@ server/src/
   access.js         hierarchy-based permission rules
   meta.js           roles, departments, statuses, priorities, task types
   db.js             SQLite schema
-  routes/           auth, users, projects, tasks, dashboard/reports, notifications
+  routes/           auth, users, projects, tasks, dashboard/reports, notifications, calls
   seed.js           demo organisation
 server/test/        API tests (node:test)
 client/src/
-  pages/            Dashboard, Tasks, Projects, ProjectDetail, Calendar, Team, Reports, Users, Settings
+  pages/            Dashboard, Tasks, Projects, ProjectDetail, Calendar, Calls, Team, Reports, Users, Settings
   components/       Layout, TaskDetail, TaskForm, board/list views, UI primitives
+  pages/Calls.jsx   call lists, sheet upload, agent queue
+  i18n.js           English and Arabic strings
+  sheet.js          Excel/CSV reading, column detection, CSV export
 ```
 
 ## Configuration

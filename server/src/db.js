@@ -95,7 +95,54 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read);
+
+CREATE TABLE IF NOT EXISTS call_lists (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  source_filename TEXT,
+  columns TEXT NOT NULL DEFAULT '[]',
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS calls (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  list_id INTEGER NOT NULL REFERENCES call_lists(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  phone TEXT DEFAULT '',
+  email TEXT DEFAULT '',
+  data TEXT NOT NULL DEFAULT '{}',
+  assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  notes TEXT DEFAULT '',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_called_at TEXT,
+  callback_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_calls_list ON calls(list_id);
+CREATE INDEX IF NOT EXISTS idx_calls_assignee ON calls(assignee_id, status);
+
+CREATE TABLE IF NOT EXISTS call_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  call_id INTEGER NOT NULL REFERENCES calls(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id),
+  status TEXT NOT NULL,
+  note TEXT DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
+
+// Columns added after the first release; ALTER existing databases in place.
+function migrate(db) {
+  const cols = db.prepare('PRAGMA table_info(notifications)').all().map((c) => c.name);
+  if (!cols.includes('link')) db.exec('ALTER TABLE notifications ADD COLUMN link TEXT');
+  if (!cols.includes('params')) db.exec('ALTER TABLE notifications ADD COLUMN params TEXT');
+  const ucols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  if (!ucols.includes('language')) db.exec("ALTER TABLE users ADD COLUMN language TEXT DEFAULT 'en'");
+}
 
 export function openDb(file) {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -103,6 +150,7 @@ export function openDb(file) {
   db.exec('PRAGMA foreign_keys = ON;');
   if (file !== ':memory:') db.exec('PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }
 

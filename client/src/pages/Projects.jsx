@@ -5,7 +5,7 @@ import { useApp } from '../context.jsx';
 import { Avatar, DeptTag, Empty, Modal, Progress, UserSelect, formatDate } from '../components/ui.jsx';
 
 export function ProjectForm({ project, onClose, onSaved }) {
-  const { meta, user, users, deptOf } = useApp();
+  const { meta, user, users, deptOf, t, deptLabel, projectStatusLabel } = useApp();
   const [error, setError] = useState('');
   const [form, setForm] = useState(() => ({
     name: project?.name || '',
@@ -40,16 +40,16 @@ export function ProjectForm({ project, onClose, onSaved }) {
 
   return (
     <Modal
-      title={project ? 'Edit project' : 'New project'}
+      title={project ? t('proj.editTitle') : t('proj.newTitle')}
       onClose={onClose}
       wide
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button className="btn primary" form="project-form">
-            {project ? 'Save' : 'Create project'}
+            {project ? t('common.save') : t('proj.create')}
           </button>
         </>
       }
@@ -58,58 +58,58 @@ export function ProjectForm({ project, onClose, onSaved }) {
         {error && <div className="alert error">{error}</div>}
         <div className="grid-3">
           <label className="span-2">
-            Name
+            {t('proj.name')}
             <input required autoFocus value={form.name} onChange={set('name')} />
           </label>
           <label>
-            Color
+            {t('proj.color')}
             <input type="color" value={form.color} onChange={set('color')} />
           </label>
         </div>
         <label>
-          Description
+          {t('form.description')}
           <textarea rows={2} value={form.description} onChange={set('description')} />
         </label>
         <div className="grid-3">
           <label>
-            Department
+            {t('proj.department')}
             <select value={form.department} onChange={set('department')}>
-              {Object.entries(meta.departments).map(([k, d]) => (
+              {Object.keys(meta.departments).map((k) => (
                 <option key={k} value={k}>
-                  {d.label}
+                  {deptLabel(k)}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Status
+            {t('proj.status')}
             <select value={form.status} onChange={set('status')}>
               {meta.projectStatuses.map((s) => (
                 <option key={s.key} value={s.key}>
-                  {s.label}
+                  {projectStatusLabel(s.key)}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Owner
+            {t('proj.owner')}
             <UserSelect users={users} value={form.owner_id} allowEmpty={false} onChange={(v) => setForm((f) => ({ ...f, owner_id: v }))} />
           </label>
           <label>
-            Start date
+            {t('proj.start')}
             <input type="date" value={form.start_date || ''} onChange={set('start_date')} />
           </label>
           <label>
-            Due date
+            {t('form.due')}
             <input type="date" value={form.due_date || ''} onChange={set('due_date')} />
           </label>
         </div>
         <div>
-          <div className="field-label">Members ({form.member_ids.length})</div>
+          <div className="field-label">{t('proj.members', { n: form.member_ids.length })}</div>
           <div className="member-picker">
             {byDept.map(([d, list]) => (
               <div key={d}>
-                <div className="muted sm">{meta.departments[d].label}</div>
+                <div className="muted sm">{deptLabel(d)}</div>
                 {list.map((u) => (
                   <label key={u.id} className="check">
                     <input type="checkbox" checked={form.member_ids.includes(u.id)} onChange={() => toggleMember(u.id)} /> {u.name}
@@ -125,7 +125,7 @@ export function ProjectForm({ project, onClose, onSaved }) {
 }
 
 export default function Projects() {
-  const { version, refresh, isManager, meta, notify } = useApp();
+  const { version, refresh, isManager, meta, notify, t, deptLabel, projectStatusLabel } = useApp();
   const [projects, setProjects] = useState(null);
   const [dept, setDept] = useState('');
   const [showArchived, setShowArchived] = useState(false);
@@ -139,43 +139,43 @@ export default function Projects() {
   return (
     <div className="page">
       <div className="page-head">
-        <h1>Projects</h1>
+        <h1>{t('proj.title')}</h1>
         {isManager && (
           <button className="btn primary" onClick={() => setCreating(true)}>
-            + New project
+            {t('proj.new')}
           </button>
         )}
       </div>
       <div className="filters">
         <select value={dept} onChange={(e) => setDept(e.target.value)}>
-          <option value="">All departments</option>
-          {Object.entries(meta.departments).map(([k, d]) => (
+          <option value="">{t('proj.allDepts')}</option>
+          {Object.keys(meta.departments).map((k) => (
             <option key={k} value={k}>
-              {d.label}
+              {deptLabel(k)}
             </option>
           ))}
         </select>
         <label className="check">
-          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Show archived
+          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> {t('proj.showArchived')}
         </label>
       </div>
-      {projects && projects.length === 0 && <Empty icon="▤">No projects yet. {isManager ? 'Create one to group related tasks.' : 'You will see projects you are added to here.'}</Empty>}
+      {projects && projects.length === 0 && <Empty icon="▤">{isManager ? t('proj.emptyManager') : t('proj.emptyMember')}</Empty>}
       <div className="project-grid">
         {projects?.map((p) => (
           <Link key={p.id} to={`/projects/${p.id}`} className="card project-card" style={{ '--c': p.color }}>
             <div className="row between">
               <DeptTag department={p.department} />
-              <span className={`pill pstatus-${p.status}`}>{meta.projectStatuses.find((s) => s.key === p.status)?.label}</span>
+              <span className={`pill pstatus-${p.status}`}>{projectStatusLabel(p.status)}</span>
             </div>
             <h3>{p.name}</h3>
             <p className="muted clamp">{p.description}</p>
             <Progress value={p.done_count} total={p.task_count} color={p.color} />
             <div className="row between sm">
               <span className="muted">
-                {p.done_count}/{p.task_count} done
-                {p.overdue_count > 0 && <span className="text-danger"> · {p.overdue_count} overdue</span>}
+                {t('proj.doneOf', { done: p.done_count, total: p.task_count })}
+                {p.overdue_count > 0 && <span className="text-danger"> · {t('proj.overdue', { n: p.overdue_count })}</span>}
               </span>
-              {p.due_date && <span className="muted">Due {formatDate(p.due_date)}</span>}
+              {p.due_date && <span className="muted">{t('proj.dueOn', { date: formatDate(p.due_date) })}</span>}
             </div>
             <div className="avatars">
               {p.members.slice(0, 6).map((m) => (
@@ -192,7 +192,7 @@ export default function Projects() {
           onSaved={(p) => {
             setCreating(false);
             refresh();
-            notify('Project created', 'success');
+            notify(t('proj.created'), 'success');
             navigate(`/projects/${p.id}`);
           }}
         />

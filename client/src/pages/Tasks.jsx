@@ -15,7 +15,7 @@ function readView() {
 }
 
 export default function Tasks() {
-  const { version, refresh, users } = useApp();
+  const { version, refresh, users, t } = useApp();
   const [params, setParams] = useSearchParams();
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -37,13 +37,13 @@ export default function Tasks() {
 
   useEffect(() => {
     // Debounce typing in the search box.
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       api
         .get('/tasks', filters)
         .then(setTasks)
         .finally(() => setLoading(false));
     }, 150);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [key, version]);
 
   const switchView = (v) => {
@@ -58,18 +58,18 @@ export default function Tasks() {
   return (
     <div className="page">
       <div className="page-head">
-        <h1>Tasks</h1>
+        <h1>{t('tasks.title')}</h1>
         <div className="seg">
           <button className={view === 'board' ? 'active' : ''} onClick={() => switchView('board')}>
-            Board
+            {t('tasks.board')}
           </button>
           <button className={view === 'list' ? 'active' : ''} onClick={() => switchView('list')}>
-            List
+            {t('tasks.list')}
           </button>
         </div>
       </div>
       <TaskFilters filters={filters} setFilters={setFilters} projects={projects} people={users} />
-      <div className="muted sm results">{loading ? 'Loading…' : `${tasks.length} task${tasks.length === 1 ? '' : 's'}`}</div>
+      <div className="muted sm results">{loading ? t('common.loading') : t('tasks.count', { n: tasks.length })}</div>
       {view === 'board' ? (
         <Board tasks={tasks} onChanged={refresh} newTaskDefaults={{ project_id: filters.project_id && filters.project_id !== 'none' ? filters.project_id : null }} />
       ) : (

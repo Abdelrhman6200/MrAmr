@@ -1,22 +1,23 @@
 import { useState } from 'react';
 import { useApp } from '../context.jsx';
+import { LanguageSwitch } from '../components/Layout.jsx';
 
 const DEMO = [
-  ['Head of Company', 'ceo@taskflow.local'],
-  ['Operations Manager', 'ops@taskflow.local'],
-  ['Head of Content', 'content.head@taskflow.local'],
-  ['Instructor', 'instructor1@taskflow.local'],
-  ['Marketing Manager', 'marketing@taskflow.local'],
-  ['Systems Ops', 'sysops@taskflow.local'],
-  ['Content Quality', 'quality@taskflow.local'],
-  ['Ops QC', 'qc@taskflow.local'],
-  ['Head of Customer Service', 'cs.head@taskflow.local'],
-  ['Customer Service', 'support1@taskflow.local'],
-  ['Product Owner', 'product@taskflow.local'],
+  ['ceo', 'ceo@taskflow.local'],
+  ['ops_manager', 'ops@taskflow.local'],
+  ['head_of_content', 'content.head@taskflow.local'],
+  ['instructor', 'instructor1@taskflow.local'],
+  ['marketing_manager', 'marketing@taskflow.local'],
+  ['sysops_manager', 'sysops@taskflow.local'],
+  ['content_quality', 'quality@taskflow.local'],
+  ['ops_qc', 'qc@taskflow.local'],
+  ['cs_head', 'cs.head@taskflow.local'],
+  ['cs_member', 'support1@taskflow.local'],
+  ['product_owner', 'product@taskflow.local'],
 ];
 
 export default function Login() {
-  const { login } = useApp();
+  const { login, t, roleLabel } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -38,26 +39,29 @@ export default function Login() {
   return (
     <div className="login">
       <form className="login-card" onSubmit={submit}>
-        <div className="brand big">
-          <span className="logo">✓</span> TaskFlow
+        <div className="row between wrap gap">
+          <div className="brand big">
+            <span className="logo">✓</span> TaskFlow
+          </div>
+          <LanguageSwitch />
         </div>
-        <p className="muted">Plan, assign and review work across content, marketing, operations, support and product.</p>
+        <p className="muted">{t('app.tagline')}</p>
         {error && <div className="alert error">{error}</div>}
         <label>
-          Email
+          {t('login.email')}
           <input type="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
         </label>
         <label>
-          Password
+          {t('login.password')}
           <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </label>
         <button className="btn primary block" disabled={busy}>
-          {busy ? 'Signing in…' : 'Sign in'}
+          {busy ? t('login.signingIn') : t('login.signIn')}
         </button>
         <details className="demo">
-          <summary>Demo accounts (password: password123)</summary>
+          <summary>{t('login.demo')}</summary>
           <div className="demo-grid">
-            {DEMO.map(([label, em]) => (
+            {DEMO.map(([role, em]) => (
               <button
                 type="button"
                 key={em}
@@ -67,7 +71,7 @@ export default function Login() {
                   setPassword('password123');
                 }}
               >
-                {label}
+                {roleLabel(role)}
               </button>
             ))}
           </div>

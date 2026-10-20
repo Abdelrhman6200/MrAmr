@@ -25,12 +25,13 @@ function Bars({ data, colors, labels }) {
 }
 
 function Trend({ weeks }) {
+  const { t } = useApp();
   const max = Math.max(1, ...weeks.flatMap((w) => [w.created, w.completed]));
   return (
     <div>
       <div className="trend">
         {weeks.map((w) => (
-          <div key={w.week} className="trend-col" title={`Week ending ${w.week}: ${w.created} created, ${w.completed} completed`}>
+          <div key={w.week} className="trend-col" title={t('rep.weekTip', w)}>
             <div className="trend-bars">
               <span className="trend-bar created" style={{ height: `${(w.created / max) * 100}%` }} />
               <span className="trend-bar completed" style={{ height: `${(w.completed / max) * 100}%` }} />
@@ -41,10 +42,10 @@ function Trend({ weeks }) {
       </div>
       <div className="legend sm">
         <span>
-          <i className="sw created" /> Created
+          <i className="sw created" /> {t('rep.created')}
         </span>
         <span>
-          <i className="sw completed" /> Completed
+          <i className="sw completed" /> {t('rep.completed')}
         </span>
       </div>
     </div>
@@ -52,54 +53,54 @@ function Trend({ weeks }) {
 }
 
 export default function Reports() {
-  const { meta, version } = useApp();
+  const { meta, version, t, statusLabel, priorityLabel, typeLabel } = useApp();
   const [data, setData] = useState(null);
   useEffect(() => {
     api.get('/dashboard/reports').then(setData);
   }, [version]);
-  if (!data) return <div className="muted">Loading…</div>;
+  if (!data) return <div className="muted">{t('common.loading')}</div>;
 
-  const label = (list) => Object.fromEntries(list.map((x) => [x.key, x.label]));
+  const label = (list, fn) => Object.fromEntries(list.map((x) => [x.key, fn(x.key)]));
   const done = data.byStatus.done || 0;
 
   return (
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>Reports</h1>
-          <p className="muted">Based on the {data.total} tasks visible to you.</p>
+          <h1>{t('rep.title')}</h1>
+          <p className="muted">{t('rep.basis', { n: data.total })}</p>
         </div>
       </div>
       <div className="stats">
         <div className="stat">
           <div className="stat-value">{data.total}</div>
-          <div className="stat-label">Total tasks</div>
+          <div className="stat-label">{t('rep.total')}</div>
         </div>
         <div className="stat success">
           <div className="stat-value">{data.total ? Math.round((done / data.total) * 100) : 0}%</div>
-          <div className="stat-label">Completion rate</div>
+          <div className="stat-label">{t('rep.completion')}</div>
         </div>
         <div className="stat danger">
           <div className="stat-value">{data.byDepartment.reduce((s, d) => s + d.overdue, 0)}</div>
-          <div className="stat-label">Overdue</div>
+          <div className="stat-label">{t('rep.overdue')}</div>
         </div>
         <div className="stat warn">
           <div className="stat-value">{data.byStatus.blocked || 0}</div>
-          <div className="stat-label">Blocked</div>
+          <div className="stat-label">{t('rep.blocked')}</div>
         </div>
       </div>
       <div className="dash-grid">
         <section className="panel span-2">
-          <h2>By department</h2>
+          <h2>{t('rep.byDept')}</h2>
           <table className="table">
             <thead>
               <tr>
-                <th>Department</th>
-                <th>Total</th>
-                <th>Open</th>
-                <th>Blocked</th>
-                <th>Overdue</th>
-                <th style={{ width: '30%' }}>Completion</th>
+                <th>{t('rep.department')}</th>
+                <th>{t('rep.totalCol')}</th>
+                <th>{t('rep.open')}</th>
+                <th>{t('rep.blocked')}</th>
+                <th>{t('rep.overdue')}</th>
+                <th style={{ width: '30%' }}>{t('rep.completionCol')}</th>
               </tr>
             </thead>
             <tbody>
@@ -124,31 +125,31 @@ export default function Reports() {
           </table>
         </section>
         <section className="panel">
-          <h2>Status breakdown</h2>
-          <Bars data={data.byStatus} colors={STATUS_COLORS} labels={label(meta.statuses)} />
+          <h2>{t('rep.status')}</h2>
+          <Bars data={data.byStatus} colors={STATUS_COLORS} labels={label(meta.statuses, statusLabel)} />
         </section>
         <section className="panel">
-          <h2>Open work by priority</h2>
-          <Bars data={data.byPriority} colors={PRIORITY_COLORS} labels={label(meta.priorities)} />
+          <h2>{t('rep.priority')}</h2>
+          <Bars data={data.byPriority} colors={PRIORITY_COLORS} labels={label(meta.priorities, priorityLabel)} />
         </section>
         <section className="panel">
-          <h2>Weekly throughput</h2>
+          <h2>{t('rep.throughput')}</h2>
           <Trend weeks={data.weeks} />
         </section>
         <section className="panel">
-          <h2>By type</h2>
-          <Bars data={data.byType} labels={Object.fromEntries(meta.taskTypes.filter((t) => data.byType[t.key]).map((t) => [t.key, t.label]))} />
+          <h2>{t('rep.byType')}</h2>
+          <Bars data={data.byType} labels={Object.fromEntries(meta.taskTypes.filter((x) => data.byType[x.key]).map((x) => [x.key, typeLabel(x.key)]))} />
         </section>
         <section className="panel span-2">
-          <h2>Project health</h2>
+          <h2>{t('rep.health')}</h2>
           <table className="table">
             <thead>
               <tr>
-                <th>Project</th>
-                <th>Department</th>
-                <th>Tasks</th>
-                <th>Overdue</th>
-                <th style={{ width: '30%' }}>Progress</th>
+                <th>{t('rep.project')}</th>
+                <th>{t('rep.department')}</th>
+                <th>{t('rep.tasks')}</th>
+                <th>{t('rep.overdue')}</th>
+                <th style={{ width: '30%' }}>{t('rep.progress')}</th>
               </tr>
             </thead>
             <tbody>

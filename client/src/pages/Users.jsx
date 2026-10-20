@@ -5,7 +5,7 @@ import { useApp } from '../context.jsx';
 import { Avatar, DeptTag, Modal, UserSelect } from '../components/ui.jsx';
 
 function UserForm({ editing, people, onClose, onSaved }) {
-  const { meta, user: me } = useApp();
+  const { meta, user: me, t, roleLabel, deptLabel } = useApp();
   const [error, setError] = useState('');
   const [form, setForm] = useState(() => ({
     name: editing?.name || '',
@@ -35,15 +35,15 @@ function UserForm({ editing, people, onClose, onSaved }) {
 
   return (
     <Modal
-      title={editing ? `Edit ${editing.name}` : 'Add user'}
+      title={editing ? t('users.editTitle', { name: editing.name }) : t('users.addTitle')}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button className="btn primary" form="user-form">
-            Save
+            {t('common.save')}
           </button>
         </>
       }
@@ -51,38 +51,38 @@ function UserForm({ editing, people, onClose, onSaved }) {
       <form id="user-form" className="form" onSubmit={submit}>
         {error && <div className="alert error">{error}</div>}
         <label>
-          Full name
+          {t('users.fullName')}
           <input required value={form.name} onChange={set('name')} />
         </label>
         <label>
-          Email
+          {t('users.email')}
           <input type="email" required value={form.email} onChange={set('email')} />
         </label>
         <label>
-          Role
+          {t('users.role')}
           <select value={form.role} onChange={set('role')}>
             {roles.map(([k, r]) => (
               <option key={k} value={k}>
-                {r.label} ({meta.departments[r.department].label})
+                {roleLabel(k)} ({deptLabel(r.department)})
               </option>
             ))}
           </select>
         </label>
         <label>
-          Job title <span className="hint">(optional, defaults to role)</span>
-          <input value={form.title} onChange={set('title')} placeholder={meta.roles[form.role].label} />
+          {t('users.jobTitle')} <span className="hint">{t('users.jobTitleHint')}</span>
+          <input value={form.title} onChange={set('title')} placeholder={roleLabel(form.role)} />
         </label>
         <label>
-          Reports to
-          <UserSelect users={people.filter((p) => p.id !== editing?.id && p.active)} value={form.manager_id} onChange={set('manager_id')} placeholder="No manager (top level)" />
+          {t('users.reportsTo')}
+          <UserSelect users={people.filter((p) => p.id !== editing?.id && p.active)} value={form.manager_id} onChange={set('manager_id')} placeholder={t('users.noManager')} />
         </label>
         <label>
-          {editing ? 'Reset password' : 'Password'} <span className="hint">(min 8 characters)</span>
+          {editing ? t('users.resetPassword') : t('users.password')} <span className="hint">{t('users.passwordHint')}</span>
           <input type="password" required={!editing} minLength={8} value={form.password} onChange={set('password')} autoComplete="new-password" />
         </label>
         {editing && editing.id !== me.id && (
           <label className="check">
-            <input type="checkbox" checked={form.active} onChange={set('active')} /> Active (can sign in)
+            <input type="checkbox" checked={form.active} onChange={set('active')} /> {t('users.activeLabel')}
           </label>
         )}
       </form>
@@ -91,7 +91,7 @@ function UserForm({ editing, people, onClose, onSaved }) {
 }
 
 export default function Users() {
-  const { isUserAdmin, refresh, version, roleLabel, deptOf, userById, notify, user: me } = useApp();
+  const { isUserAdmin, refresh, version, roleLabel, deptOf, userById, notify, user: me, t } = useApp();
   const [people, setPeople] = useState([]);
   const [editing, setEditing] = useState(undefined);
   const [q, setQ] = useState('');
@@ -106,23 +106,23 @@ export default function Users() {
   return (
     <div className="page">
       <div className="page-head">
-        <h1>Users</h1>
+        <h1>{t('users.title')}</h1>
         <button className="btn primary" onClick={() => setEditing(null)}>
-          + Add user
+          {t('users.add')}
         </button>
       </div>
       <div className="filters">
-        <input className="search" placeholder="Search people…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="search" placeholder={t('users.search')} value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Role</th>
-              <th>Department</th>
-              <th>Reports to</th>
-              <th>Status</th>
+              <th>{t('users.name')}</th>
+              <th>{t('users.role')}</th>
+              <th>{t('users.department')}</th>
+              <th>{t('users.reportsTo')}</th>
+              <th>{t('users.status')}</th>
               <th />
             </tr>
           </thead>
@@ -143,11 +143,11 @@ export default function Users() {
                   <DeptTag department={deptOf(p.role)} />
                 </td>
                 <td>{p.manager_id ? userById(p.manager_id)?.name || people.find((x) => x.id === p.manager_id)?.name : <span className="muted">—</span>}</td>
-                <td>{p.active ? <span className="pill status-done">Active</span> : <span className="pill status-todo">Inactive</span>}</td>
+                <td>{p.active ? <span className="pill status-done">{t('users.active')}</span> : <span className="pill status-todo">{t('users.inactive')}</span>}</td>
                 <td>
                   {(p.role !== 'ceo' || me.role === 'ceo') && (
                     <button className="link" onClick={() => setEditing(p)}>
-                      Edit
+                      {t('common.edit')}
                     </button>
                   )}
                 </td>
@@ -164,7 +164,7 @@ export default function Users() {
           onSaved={() => {
             setEditing(undefined);
             refresh();
-            notify('User saved', 'success');
+            notify(t('users.saved'), 'success');
           }}
         />
       )}

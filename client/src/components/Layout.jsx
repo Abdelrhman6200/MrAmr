@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { Avatar, timeAgo, useTaskDialog } from './ui.jsx';
@@ -7,17 +7,33 @@ import TaskDetail from './TaskDetail.jsx';
 import TaskForm from './TaskForm.jsx';
 
 const NAV = [
-  { to: '/', label: 'Dashboard', icon: '◧', end: true },
-  { to: '/tasks', label: 'Tasks', icon: '☑' },
-  { to: '/projects', label: 'Projects', icon: '▤' },
-  { to: '/calendar', label: 'Calendar', icon: '▦' },
-  { to: '/team', label: 'Team', icon: '☷' },
-  { to: '/reports', label: 'Reports', icon: '▥' },
+  { to: '/', key: 'nav.dashboard', icon: '◧', end: true },
+  { to: '/tasks', key: 'nav.tasks', icon: '☑' },
+  { to: '/projects', key: 'nav.projects', icon: '▤' },
+  { to: '/calendar', key: 'nav.calendar', icon: '▦' },
+  { to: '/calls', key: 'nav.calls', icon: '☎', calls: true },
+  { to: '/team', key: 'nav.team', icon: '☷' },
+  { to: '/reports', key: 'nav.reports', icon: '▥' },
 ];
 
+export function LanguageSwitch({ className = '' }) {
+  const { lang, setLang, t } = useApp();
+  return (
+    <div className={`seg lang-switch ${className}`} role="group" aria-label={t('common.language')}>
+      <button type="button" className={lang === 'en' ? 'active' : ''} onClick={() => setLang('en')} lang="en">
+        English
+      </button>
+      <button type="button" className={lang === 'ar' ? 'active' : ''} onClick={() => setLang('ar')} lang="ar">
+        العربية
+      </button>
+    </div>
+  );
+}
+
 function Notifications() {
-  const { version } = useApp();
+  const { version, t } = useApp();
   const { open: openTask } = useTaskDialog();
+  const navigate = useNavigate();
   const [data, setData] = useState({ unread: 0, items: [] });
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -25,8 +41,8 @@ function Notifications() {
   const load = () => api.get('/notifications').then(setData).catch(() => {});
   useEffect(() => {
     load();
-    const t = setInterval(load, 30000);
-    return () => clearInterval(t);
+    const timer = setInterval(load, 30000);
+    return () => clearInterval(timer);
   }, [version]);
 
   useEffect(() => {
@@ -38,29 +54,33 @@ function Notifications() {
   const click = async (n) => {
     if (!n.read) await api.post(`/notifications/${n.id}/read`);
     setOpen(false);
-    if (n.task_id) openTask(n.task_id);
+    if (n.link) navigate(n.link);
+    else if (n.task_id) openTask(n.task_id);
     load();
   };
 
+  // Rebuild the message in the current language when we have its parts.
+  const text = (n) => (n.params ? t(`notif.${n.type}`, n.params) : n.message);
+
   return (
     <div className="notif" ref={ref}>
-      <button className="icon-btn bell" onClick={() => setOpen((o) => !o)} aria-label="Notifications">
+      <button className="icon-btn bell" onClick={() => setOpen((o) => !o)} aria-label={t('notif.title')}>
         🔔{data.unread > 0 && <span className="badge">{data.unread > 9 ? '9+' : data.unread}</span>}
       </button>
       {open && (
         <div className="notif-panel">
           <div className="notif-head">
-            <strong>Notifications</strong>
+            <strong>{t('notif.title')}</strong>
             {data.unread > 0 && (
               <button className="link" onClick={() => api.post('/notifications/read-all').then(load)}>
-                Mark all read
+                {t('notif.markAll')}
               </button>
             )}
           </div>
-          {data.items.length === 0 && <div className="muted pad">You're all caught up.</div>}
+          {data.items.length === 0 && <div className="muted pad">{t('notif.empty')}</div>}
           {data.items.map((n) => (
             <button key={n.id} className={`notif-item ${n.read ? '' : 'unread'}`} onClick={() => click(n)}>
-              <span>{n.message}</span>
+              <span>{text(n)}</span>
               <small className="muted">{timeAgo(n.created_at)}</small>
             </button>
           ))}
@@ -71,7 +91,7 @@ function Notifications() {
 }
 
 export default function Layout({ children }) {
-  const { user, logout, roleLabel, isUserAdmin, toast } = useApp();
+  const { user, logout, roleLabel, isUserAdmin, canUseCalls, toast, t } = useApp();
   const { current, create } = useTaskDialog();
   const [menu, setMenu] = useState(false);
   const location = useLocation();
@@ -84,19 +104,19 @@ export default function Layout({ children }) {
           <span className="logo">✓</span> TaskFlow
         </div>
         <button className="btn primary block" onClick={() => create()}>
-          + New task
+          {t('nav.newTask')}
         </button>
         <nav>
-          {NAV.map((n) => (
+          {NAV.filter((n) => !n.calls || canUseCalls).map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className="nav-link">
               <span className="nav-icon">{n.icon}</span>
-              {n.label}
+              {t(n.key)}
             </NavLink>
           ))}
           {isUserAdmin && (
             <NavLink to="/users" className="nav-link">
               <span className="nav-icon">⚙</span>
-              Users
+              {t('nav.users')}
             </NavLink>
           )}
         </nav>
@@ -109,17 +129,18 @@ export default function Layout({ children }) {
             </div>
           </NavLink>
           <button className="link" onClick={logout}>
-            Sign out
+            {t('nav.signOut')}
           </button>
         </div>
       </aside>
       <div className="scrim" onClick={() => setMenu(false)} />
       <div className="main">
         <header className="topbar">
-          <button className="icon-btn hamburger" onClick={() => setMenu(true)} aria-label="Menu">
+          <button className="icon-btn hamburger" onClick={() => setMenu(true)} aria-label={t('nav.menu')}>
             ☰
           </button>
           <div className="grow" />
+          <LanguageSwitch />
           <Notifications />
         </header>
         <main className="content">{children}</main>

@@ -23,43 +23,44 @@ function Stat({ label, value, tone, to }) {
 }
 
 export default function Dashboard() {
-  const { user, version, roleLabel, isManager } = useApp();
+  const { user, version, roleLabel, isManager, t, canUseCalls } = useApp();
   const [data, setData] = useState(null);
+  const [calls, setCalls] = useState(null);
 
   useEffect(() => {
     api.get('/dashboard').then(setData).catch(() => {});
-  }, [version]);
+    if (canUseCalls) api.get('/calls/mine').then(setCalls).catch(() => {});
+  }, [version, canUseCalls]);
 
-  if (!data) return <div className="muted">Loading…</div>;
+  if (!data) return <div className="muted">{t('common.loading')}</div>;
   const c = data.counts;
   const open = (c.todo || 0) + (c.in_progress || 0) + (c.blocked || 0) + (c.in_review || 0);
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const greeting = t(hour < 12 ? 'dash.morning' : hour < 18 ? 'dash.afternoon' : 'dash.evening', { name: user.name.split(' ')[0] });
 
   return (
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>
-            {greeting}, {user.name.split(' ')[0]}
-          </h1>
+          <h1>{greeting}</h1>
           <p className="muted">{user.title || roleLabel(user.role)}</p>
         </div>
       </div>
 
       <div className="stats">
-        <Stat label="Open tasks" value={open} to="/tasks?scope=mine" />
-        <Stat label="In progress" value={c.in_progress} />
-        <Stat label="Overdue" value={data.overdue.length} tone={data.overdue.length ? 'danger' : ''} to="/tasks?scope=mine&due=overdue" />
-        <Stat label="Blocked" value={c.blocked} tone={c.blocked ? 'warn' : ''} />
-        <Stat label="To review" value={data.reviewQueue.length} tone={data.reviewQueue.length ? 'info' : ''} to="/tasks?scope=review" />
-        <Stat label="Done" value={c.done} tone="success" />
+        <Stat label={t('dash.open')} value={open} to="/tasks?scope=mine" />
+        <Stat label={t('dash.inProgress')} value={c.in_progress} />
+        <Stat label={t('dash.overdue')} value={data.overdue.length} tone={data.overdue.length ? 'danger' : ''} to="/tasks?scope=mine&due=overdue" />
+        <Stat label={t('dash.blocked')} value={c.blocked} tone={c.blocked ? 'warn' : ''} />
+        <Stat label={t('dash.toReview')} value={data.reviewQueue.length} tone={data.reviewQueue.length ? 'info' : ''} to="/tasks?scope=review" />
+        <Stat label={t('dash.done')} value={c.done} tone="success" />
+        {calls && <Stat label={t('dash.myCalls')} value={calls.calls.length} tone="info" to="/calls" />}
       </div>
 
       <div className="dash-grid">
         {data.reviewQueue.length > 0 && (
           <section className="panel">
-            <h2>Waiting for your review</h2>
+            <h2>{t('dash.reviewQueue')}</h2>
             <div className="card-list">
               {data.reviewQueue.map((t) => (
                 <TaskCard key={t.id} task={t} />
@@ -70,7 +71,7 @@ export default function Dashboard() {
 
         {data.overdue.length > 0 && (
           <section className="panel danger-panel">
-            <h2>Overdue</h2>
+            <h2>{t('dash.overdue')}</h2>
             <div className="card-list">
               {data.overdue.map((t) => (
                 <TaskCard key={t.id} task={t} />
@@ -80,7 +81,7 @@ export default function Dashboard() {
         )}
 
         <section className="panel">
-          <h2>Up next</h2>
+          <h2>{t('dash.upNext')}</h2>
           {data.upcoming.length ? (
             <div className="card-list">
               {data.upcoming.map((t) => (
@@ -88,12 +89,12 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-            <Empty>Nothing on your plate. Nice!</Empty>
+            <Empty>{t('dash.nothing')}</Empty>
           )}
         </section>
 
         <section className="panel">
-          <h2>Waiting on others</h2>
+          <h2>{t('dash.waiting')}</h2>
           {data.waitingOnOthers.length ? (
             <div className="card-list">
               {data.waitingOnOthers.map((t) => (
@@ -101,23 +102,23 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-            <Empty icon="↗">Tasks you've assigned to others show up here.</Empty>
+            <Empty icon="↗">{t('dash.waitingEmpty')}</Empty>
           )}
         </section>
 
         {isManager && (
           <section className="panel span-2">
-            <h2>Team workload</h2>
+            <h2>{t('dash.workload')}</h2>
             {data.team.length ? (
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Person</th>
-                    <th>Open</th>
-                    <th>In progress</th>
-                    <th>Blocked</th>
-                    <th>Overdue</th>
-                    <th>Done (7d)</th>
+                    <th>{t('dash.person')}</th>
+                    <th>{t('rep.open')}</th>
+                    <th>{t('dash.inProgress')}</th>
+                    <th>{t('dash.blocked')}</th>
+                    <th>{t('dash.overdue')}</th>
+                    <th>{t('dash.doneWeek')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -143,13 +144,13 @@ export default function Dashboard() {
                 </tbody>
               </table>
             ) : (
-              <Empty icon="☷">No one reports to you yet.</Empty>
+              <Empty icon="☷">{t('dash.noReports')}</Empty>
             )}
           </section>
         )}
 
         <section className="panel span-2">
-          <h2>Recent activity</h2>
+          <h2>{t('dash.activity')}</h2>
           <ul className="activity">
             {data.activity.map((a) => (
               <li key={a.id}>

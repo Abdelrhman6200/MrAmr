@@ -65,6 +65,16 @@ export const PROJECT_STATUSES = [
   { key: 'archived', label: 'Archived' },
 ];
 
+// Outcomes an agent can log on a call. `open` ones stay in the agent's queue.
+export const CALL_STATUSES = [
+  { key: 'pending', label: 'Not called yet', open: true },
+  { key: 'no_answer', label: 'No answer', open: true },
+  { key: 'callback', label: 'Call back later', open: true },
+  { key: 'reached', label: 'Reached', open: false },
+  { key: 'not_interested', label: 'Not interested', open: false },
+  { key: 'wrong_number', label: 'Wrong number', open: false },
+];
+
 export const isRole = (r) => Object.hasOwn(ROLES, r);
 export const levelOf = (role) => ROLES[role]?.level ?? 'member';
 export const isManagerRole = (role) => levelOf(role) !== 'member';

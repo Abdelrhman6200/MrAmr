@@ -5,9 +5,11 @@ import { todayISO, useTaskDialog } from '../components/ui.jsx';
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+// 2024-01-01 was a Monday.
+const weekdayName = (i, locale) => new Date(2024, 0, 1 + i).toLocaleDateString(locale, { weekday: 'short' });
 
 export default function CalendarPage() {
-  const { version } = useApp();
+  const { version, t, locale } = useApp();
   const { open, create } = useTaskDialog();
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
@@ -32,23 +34,23 @@ export default function CalendarPage() {
   }, [from, to, scope, version]);
 
   const byDay = {};
-  for (const t of tasks) (byDay[t.due_date] ||= []).push(t);
+  for (const task of tasks) (byDay[task.due_date] ||= []).push(task);
   const today = todayISO();
   const shift = (n) => setCursor((c) => new Date(c.getFullYear(), c.getMonth() + n, 1));
 
   return (
     <div className="page">
       <div className="page-head">
-        <h1>{cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</h1>
+        <h1>{cursor.toLocaleDateString(locale, { month: 'long', year: 'numeric' })}</h1>
         <div className="row gap">
           <select value={scope} onChange={(e) => setScope(e.target.value)}>
-            <option value="mine">My tasks</option>
-            <option value="team">My team</option>
-            <option value="all">Everything I can see</option>
+            <option value="mine">{t('cal.mine')}</option>
+            <option value="team">{t('cal.team')}</option>
+            <option value="all">{t('cal.all')}</option>
           </select>
           <div className="seg">
-            <button onClick={() => shift(-1)} aria-label="Previous month">
-              ‹
+            <button onClick={() => shift(-1)} aria-label={t('cal.prev')}>
+              <span className="flip">‹</span>
             </button>
             <button
               onClick={() => {
@@ -56,18 +58,18 @@ export default function CalendarPage() {
                 setCursor(new Date(d.getFullYear(), d.getMonth(), 1));
               }}
             >
-              Today
+              {t('cal.today')}
             </button>
-            <button onClick={() => shift(1)} aria-label="Next month">
-              ›
+            <button onClick={() => shift(1)} aria-label={t('cal.next')}>
+              <span className="flip">›</span>
             </button>
           </div>
         </div>
       </div>
       <div className="calendar">
-        {WEEKDAYS.map((d) => (
+        {WEEKDAYS.map((d, i) => (
           <div key={d} className="cal-head">
-            {d}
+            {weekdayName(i, locale)}
           </div>
         ))}
         {days.map((d) => {
@@ -80,23 +82,23 @@ export default function CalendarPage() {
               onDoubleClick={() => create({ due_date: key })}
             >
               <div className="cal-num">{d.getDate()}</div>
-              {list.slice(0, 4).map((t) => (
+              {list.slice(0, 4).map((task) => (
                 <button
-                  key={t.id}
-                  className={`cal-task status-${t.status} ${t.status !== 'done' && key < today ? 'late' : ''}`}
-                  style={{ borderLeftColor: t.project_color || '#94a3b8' }}
-                  onClick={() => open(t.id)}
-                  title={`${t.title} — ${t.assignee_name || 'Unassigned'}`}
+                  key={task.id}
+                  className={`cal-task status-${task.status} ${task.status !== 'done' && key < today ? 'late' : ''}`}
+                  style={{ borderInlineStartColor: task.project_color || '#94a3b8' }}
+                  onClick={() => open(task.id)}
+                  title={`${task.title} — ${task.assignee_name || t('common.unassigned')}`}
                 >
-                  {t.title}
+                  {task.title}
                 </button>
               ))}
-              {list.length > 4 && <div className="muted sm">+{list.length - 4} more</div>}
+              {list.length > 4 && <div className="muted sm">{t('cal.more', { n: list.length - 4 })}</div>}
             </div>
           );
         })}
       </div>
-      <p className="muted sm">Tip: double-click a day to create a task due that day.</p>
+      <p className="muted sm">{t('cal.tip')}</p>
     </div>
   );
 }

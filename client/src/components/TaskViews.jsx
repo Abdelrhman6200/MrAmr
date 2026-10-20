@@ -5,6 +5,7 @@ import { Avatar, DueDate, Empty, PriorityTag, StatusPill, TypeTag, useTaskDialog
 
 export function TaskCard({ task, draggable, compact }) {
   const { open } = useTaskDialog();
+  const { t } = useApp();
   return (
     <div
       className={`card task-card prio-${task.priority}`}
@@ -29,12 +30,12 @@ export function TaskCard({ task, draggable, compact }) {
         <DueDate task={task} />
         <span className="card-icons muted">
           {task.checklist_total > 0 && (
-            <span title="Checklist">
+            <span title={t('tasks.checklist')}>
               ☑ {task.checklist_done}/{task.checklist_total}
             </span>
           )}
-          {task.comment_count > 0 && <span title="Comments">💬 {task.comment_count}</span>}
-          {task.reviewer_name && <span title={`Reviewer: ${task.reviewer_name}`}>👁</span>}
+          {task.comment_count > 0 && <span title={t('tasks.comments')}>💬 {task.comment_count}</span>}
+          {task.reviewer_name && <span title={`${t('tasks.reviewer')}: ${task.reviewer_name}`}>👁</span>}
         </span>
         {task.assignee_name ? <Avatar name={task.assignee_name} color={task.assignee_color} size={24} /> : <span className="avatar empty-avatar">?</span>}
       </div>
@@ -43,7 +44,7 @@ export function TaskCard({ task, draggable, compact }) {
 }
 
 export function Board({ tasks, onChanged, newTaskDefaults = {} }) {
-  const { meta, notify } = useApp();
+  const { meta, notify, t } = useApp();
   const { create } = useTaskDialog();
   const [over, setOver] = useState(null);
 
@@ -80,7 +81,7 @@ export function Board({ tasks, onChanged, newTaskDefaults = {} }) {
               <StatusPill status={s.key} />
               <span className="count">{col.length}</span>
               {s.key !== 'done' && s.key !== 'in_review' && (
-                <button className="icon-btn sm" title="Add task" onClick={() => create({ ...newTaskDefaults, status: s.key })}>
+                <button className="icon-btn sm" title={t('tasks.addTask')} onClick={() => create({ ...newTaskDefaults, status: s.key })}>
                   +
                 </button>
               )}
@@ -89,7 +90,7 @@ export function Board({ tasks, onChanged, newTaskDefaults = {} }) {
               {col.map((t) => (
                 <TaskCard key={t.id} task={t} draggable />
               ))}
-              {col.length === 0 && <div className="column-empty">Drop tasks here</div>}
+              {col.length === 0 && <div className="column-empty">{t('tasks.dropHere')}</div>}
             </div>
           </div>
         );
@@ -100,56 +101,57 @@ export function Board({ tasks, onChanged, newTaskDefaults = {} }) {
 
 export function TaskTable({ tasks, hideProject }) {
   const { open } = useTaskDialog();
-  if (!tasks.length) return <Empty>No tasks match.</Empty>;
+  const { t } = useApp();
+  if (!tasks.length) return <Empty>{t('tasks.none')}</Empty>;
   return (
     <div className="table-wrap">
       <table className="table">
         <thead>
           <tr>
-            <th>Task</th>
-            {!hideProject && <th>Project</th>}
-            <th>Status</th>
-            <th>Priority</th>
-            <th>Assignee</th>
-            <th>Due</th>
+            <th>{t('tasks.task')}</th>
+            {!hideProject && <th>{t('tasks.project')}</th>}
+            <th>{t('tasks.status')}</th>
+            <th>{t('tasks.priority')}</th>
+            <th>{t('tasks.assignee')}</th>
+            <th>{t('tasks.due')}</th>
           </tr>
         </thead>
         <tbody>
-          {tasks.map((t) => (
-            <tr key={t.id} onClick={() => open(t.id)} className="clickable">
+          {tasks.map((task) => (
+            <tr key={task.id} onClick={() => open(task.id)} className="clickable">
               <td>
-                <div className="cell-title">{t.title}</div>
+                <div className="cell-title">{task.title}</div>
                 <div className="muted sm">
-                  <TypeTag type={t.type} />
-                  {t.checklist_total > 0 && ` ☑ ${t.checklist_done}/${t.checklist_total}`}
-                  {t.comment_count > 0 && ` 💬 ${t.comment_count}`}
+                  <TypeTag type={task.type} />
+                  {task.checklist_total > 0 && ` ☑ ${task.checklist_done}/${task.checklist_total}`}
+                  {task.comment_count > 0 && ` 💬 ${task.comment_count}`}
                 </div>
               </td>
               {!hideProject && (
                 <td>
-                  {t.project_name ? (
-                    <span style={{ color: t.project_color }}>● </span>
+                  {task.project_name ? (
+                    <span style={{ color: task.project_color }}>● </span>
                   ) : null}
-                  {t.project_name || <span className="muted">—</span>}
+                  {task.project_name || <span className="muted">—</span>}
                 </td>
               )}
               <td>
-                <StatusPill status={t.status} />
+                <StatusPill status={task.status} />
               </td>
               <td>
-                <PriorityTag priority={t.priority} />
+                <PriorityTag priority={task.priority} />
               </td>
               <td>
-                {t.assignee_name ? (
+                {task.assignee_name ? (
                   <span className="row gap-sm">
-                    <Avatar name={t.assignee_name} color={t.assignee_color} size={22} /> {t.assignee_name}
+                    <Avatar name={task.assignee_name} color={task.assignee_color} size={22} /> {task.assignee_name}
                   </span>
                 ) : (
-                  <span className="muted">Unassigned</span>
+                  <span className="muted">{t('common.unassigned')}</span>
                 )}
               </td>
               <td>
-                <DueDate task={t} />
+                <DueDate task={task} />
               </td>
             </tr>
           ))}
@@ -160,48 +162,48 @@ export function TaskTable({ tasks, hideProject }) {
 }
 
 export function TaskFilters({ filters, setFilters, projects, people, showScope = true }) {
-  const { meta } = useApp();
+  const { meta, t, statusLabel, priorityLabel, typeLabel } = useApp();
   const set = (k) => (e) => setFilters({ ...filters, [k]: e.target.value });
   return (
     <div className="filters">
-      <input className="search" placeholder="Search tasks…" value={filters.q || ''} onChange={set('q')} />
+      <input className="search" placeholder={t('filter.search')} value={filters.q || ''} onChange={set('q')} />
       {showScope && (
         <select value={filters.scope || ''} onChange={set('scope')}>
-          <option value="">Everything I can see</option>
-          <option value="mine">Assigned to me</option>
-          <option value="created">Created by me</option>
-          <option value="review">Waiting for my review</option>
-          <option value="team">My team</option>
+          <option value="">{t('filter.everything')}</option>
+          <option value="mine">{t('filter.mine')}</option>
+          <option value="created">{t('filter.created')}</option>
+          <option value="review">{t('filter.review')}</option>
+          <option value="team">{t('filter.team')}</option>
         </select>
       )}
       <select value={filters.status || ''} onChange={set('status')}>
-        <option value="">Any status</option>
+        <option value="">{t('filter.anyStatus')}</option>
         {meta.statuses.map((s) => (
           <option key={s.key} value={s.key}>
-            {s.label}
+            {statusLabel(s.key)}
           </option>
         ))}
       </select>
       <select value={filters.priority || ''} onChange={set('priority')}>
-        <option value="">Any priority</option>
+        <option value="">{t('filter.anyPriority')}</option>
         {meta.priorities.map((p) => (
           <option key={p.key} value={p.key}>
-            {p.label}
+            {priorityLabel(p.key)}
           </option>
         ))}
       </select>
       <select value={filters.type || ''} onChange={set('type')}>
-        <option value="">Any type</option>
-        {meta.taskTypes.map((t) => (
-          <option key={t.key} value={t.key}>
-            {t.label}
+        <option value="">{t('filter.anyType')}</option>
+        {meta.taskTypes.map((x) => (
+          <option key={x.key} value={x.key}>
+            {typeLabel(x.key)}
           </option>
         ))}
       </select>
       {projects && (
         <select value={filters.project_id || ''} onChange={set('project_id')}>
-          <option value="">Any project</option>
-          <option value="none">No project</option>
+          <option value="">{t('filter.anyProject')}</option>
+          <option value="none">{t('filter.noProject')}</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
@@ -211,8 +213,8 @@ export function TaskFilters({ filters, setFilters, projects, people, showScope =
       )}
       {people && (
         <select value={filters.assignee_id || ''} onChange={set('assignee_id')}>
-          <option value="">Anyone</option>
-          <option value="none">Unassigned</option>
+          <option value="">{t('filter.anyone')}</option>
+          <option value="none">{t('common.unassigned')}</option>
           {people.map((u) => (
             <option key={u.id} value={u.id}>
               {u.name}
@@ -221,14 +223,14 @@ export function TaskFilters({ filters, setFilters, projects, people, showScope =
         </select>
       )}
       <select value={filters.due || ''} onChange={set('due')}>
-        <option value="">Any due date</option>
-        <option value="overdue">Overdue</option>
-        <option value="today">Due today</option>
-        <option value="week">Due in 7 days</option>
+        <option value="">{t('filter.anyDue')}</option>
+        <option value="overdue">{t('filter.overdue')}</option>
+        <option value="today">{t('filter.today')}</option>
+        <option value="week">{t('filter.week')}</option>
       </select>
       {Object.values(filters).some(Boolean) && (
         <button className="link" onClick={() => setFilters({})}>
-          Clear
+          {t('common.clear')}
         </button>
       )}
     </div>

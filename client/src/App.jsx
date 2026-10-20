@@ -11,10 +11,11 @@ import Team from './pages/Team.jsx';
 import Reports from './pages/Reports.jsx';
 import Users from './pages/Users.jsx';
 import Settings from './pages/Settings.jsx';
+import Calls from './pages/Calls.jsx';
 
 function Routed() {
   const { user, booting, meta } = useApp();
-  if (booting || !meta) return <div className="boot">Loading…</div>;
+  if (booting || !meta) return <div className="boot">…</div>;
   if (!user) return <Login />;
   return (
     <Layout>
@@ -24,6 +25,7 @@ function Routed() {
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/:id" element={<ProjectDetail />} />
         <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/calls" element={<Calls />} />
         <Route path="/team" element={<Team />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/users" element={<Users />} />

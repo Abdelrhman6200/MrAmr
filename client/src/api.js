@@ -24,6 +24,8 @@ export class ApiError extends Error {
 }
 
 let onUnauthorized = () => {};
+let translateMessage = (m) => m;
+export const setErrorTranslator = (fn) => (translateMessage = fn);
 export const setUnauthorizedHandler = (fn) => (onUnauthorized = fn);
 
 async function request(method, path, body) {
@@ -37,7 +39,7 @@ async function request(method, path, body) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401 && path !== '/auth/login') onUnauthorized();
-    throw new ApiError(res.status, data.error || res.statusText);
+    throw new ApiError(res.status, translateMessage(data.error || res.statusText));
   }
   return data;
 }

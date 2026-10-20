@@ -68,6 +68,7 @@ export default function userRoutes({ db, access }) {
     const fields = {};
     if (b.name !== undefined) fields.name = requiredString(b.name, 'name', 120);
     if (b.title !== undefined) fields.title = String(b.title || '').trim();
+    if (b.language !== undefined) fields.language = oneOf(b.language, ['en', 'ar'], 'language');
     if (admin) {
       if (b.email !== undefined) {
         const email = requiredString(b.email, 'email', 200).toLowerCase();

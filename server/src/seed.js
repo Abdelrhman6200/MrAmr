@@ -145,9 +145,42 @@ export function seed(db) {
     task(null, 'Monthly all-hands agenda', 'general', 'todo', 'medium', 'ceo', 'ceo', 10);
     task(null, 'Hire two new instructors', 'operations', 'in_progress', 'medium', 'hoc', 'ops', 21, { tags: 'hiring' });
 
-    const insNote = db.prepare('INSERT INTO notifications (user_id, type, message, task_id) VALUES (?, ?, ?, ?)');
-    insNote.run(ids.cq, 'review_requested', 'Nour Adel requested your review on "Record Lesson 2: Newton’s Laws"', lesson2);
-    insNote.run(ids.sys, 'assigned', 'Rana Kamal assigned you "Video player freezes on Safari"', safari);
+    // Customer Service call list
+    const callList = Number(
+      db
+        .prepare('INSERT INTO call_lists (name, description, source_filename, columns, created_by) VALUES (?, ?, ?, ?, ?)')
+        .run('Failed payments — October', 'Students whose card payment failed this month.', 'failed-payments-october.xlsx', JSON.stringify(['Name', 'Phone', 'Email', 'Course', 'Amount']), ids.cs)
+        .lastInsertRowid,
+    );
+    const insCall = db.prepare('INSERT INTO calls (list_id, name, phone, email, data, assignee_id, status, notes, attempts, last_called_at, callback_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const insLog = db.prepare('INSERT INTO call_logs (call_id, user_id, status, note) VALUES (?, ?, ?, ?)');
+    const CONTACTS = [
+      ['Ahmed Mahmoud', '+20 100 123 4501', 'Physics 101', '450', 'cs1', 'reached', 'Paid by bank transfer.'],
+      ['Sara Ali', '+20 100 123 4502', 'Physics 101', '450', 'cs2', 'no_answer', ''],
+      ['Omar Khaled', '+20 100 123 4503', 'Chemistry', '380', 'cs1', 'callback', 'Asked to call after 6pm.'],
+      ['Mona Hassan', '+20 100 123 4504', 'Physics 101', '450', 'cs2', 'pending', ''],
+      ['Youssef Adel', '+20 100 123 4505', 'Math', '300', 'cs1', 'pending', ''],
+      ['Laila Samy', '+20 100 123 4506', 'Physics 101', '450', 'cs2', 'reached', 'Will retry the card tonight.'],
+      ['Karim Nabil', '+20 100 123 4507', 'Math', '300', 'cs1', 'wrong_number', ''],
+      ['Nada Fouad', '+20 100 123 4508', 'Chemistry', '380', 'cs2', 'pending', ''],
+      ['Tarek Ezzat', '+20 100 123 4509', 'Physics 101', '450', null, 'pending', ''],
+      ['Heba Magdy', '+20 100 123 4510', 'Math', '300', null, 'pending', ''],
+    ];
+    const tomorrow = `${day(1)}T18:00`;
+    for (const [name, phone, course, amount, who, status, note] of CONTACTS) {
+      const email = `${name.split(' ')[0].toLowerCase()}@example.com`;
+      const called = status !== 'pending';
+      const cid = Number(
+        insCall
+          .run(callList, name, phone, email, JSON.stringify({ Name: name, Phone: phone, Email: email, Course: course, Amount: amount }), who ? ids[who] : null, status, note, called ? 1 : 0, called ? new Date().toISOString() : null, status === 'callback' ? tomorrow : null)
+          .lastInsertRowid,
+      );
+      if (called) insLog.run(cid, ids[who], status, note);
+    }
+
+    const insNote = db.prepare('INSERT INTO notifications (user_id, type, message, task_id, params) VALUES (?, ?, ?, ?, ?)');
+    insNote.run(ids.cq, 'review_requested', 'Nour Adel requested your review on "Record Lesson 2: Newton’s Laws"', lesson2, JSON.stringify({ actor: 'Nour Adel', title: 'Record Lesson 2: Newton’s Laws' }));
+    insNote.run(ids.sys, 'assigned', 'Rana Kamal assigned you "Video player freezes on Safari"', safari, JSON.stringify({ actor: 'Rana Kamal', title: 'Video player freezes on Safari' }));
   });
 }
 

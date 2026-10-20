@@ -1,5 +1,16 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api, getToken, setToken, setUnauthorizedHandler } from './api.js';
+import { api, getToken, setErrorTranslator, setToken, setUnauthorizedHandler } from './api.js';
+import { DICTS, localeOf, setActiveLocale, translate, translateError } from './i18n.js';
+
+const LANG_KEY = 'taskflow.lang';
+function storedLang() {
+  try {
+    return localStorage.getItem(LANG_KEY);
+  } catch {
+    return null;
+  }
+}
+const browserLang = () => (navigator.language || '').toLowerCase().startsWith('ar') ? 'ar' : 'en';
 
 const AppContext = createContext(null);
 export const useApp = () => useContext(AppContext);
@@ -12,6 +23,7 @@ export function AppProvider({ children }) {
   // Bumped after any mutation so mounted views refetch.
   const [version, setVersion] = useState(0);
   const [toast, setToast] = useState(null);
+  const [lang, setLangState] = useState(() => storedLang() || browserLang());
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
 
@@ -23,10 +35,38 @@ export function AppProvider({ children }) {
   useEffect(() => setUnauthorizedHandler(logout), [logout]);
 
   useEffect(() => {
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+    setErrorTranslator((m) => translateError(lang, m));
+  }, [lang]);
+
+  // A choice made on this device wins; otherwise use the account's saved language.
+  const adoptUserLang = (u) => {
+    if (!storedLang() && (u.language === 'ar' || u.language === 'en')) setLangState(u.language);
+  };
+
+  const setLang = useCallback((next) => {
+    setLangState(next);
+    try {
+      localStorage.setItem(LANG_KEY, next);
+    } catch {
+      /* storage unavailable */
+    }
+    setUser((u) => {
+      if (u && u.language !== next) api.patch(`/users/${u.id}`, { language: next }).catch(() => {});
+      return u ? { ...u, language: next } : u;
+    });
+  }, []);
+
+  useEffect(() => {
     (async () => {
       try {
         setMeta(await api.get('/meta'));
-        if (getToken()) setUser((await api.get('/auth/me')).user);
+        if (getToken()) {
+          const me = (await api.get('/auth/me')).user;
+          adoptUserLang(me);
+          setUser(me);
+        }
       } catch {
         setToken(null);
       } finally {
@@ -42,6 +82,7 @@ export function AppProvider({ children }) {
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password });
     setToken(res.token);
+    adoptUserLang(res.user);
     setUser(res.user);
   };
 
@@ -56,9 +97,26 @@ export function AppProvider({ children }) {
   }, [toast]);
 
   const value = useMemo(() => {
-    const roleLabel = (role) => meta?.roles[role]?.label ?? role;
+    const t = (key, vars) => translate(lang, key, vars);
+    // Server lists carry English labels; Arabic comes from the dictionary.
+    const label = (prefix, key, english) => (lang === 'ar' && DICTS.ar[`${prefix}.${key}`]) || english || key;
+    const find = (list, key) => list?.find((x) => x.key === key)?.label;
+    const roleLabel = (role) => label('role', role, meta?.roles[role]?.label);
     const deptOf = (role) => meta?.roles[role]?.department;
+    const locale = localeOf(lang);
+    setActiveLocale(locale);
     return {
+      lang,
+      setLang,
+      t,
+      locale,
+      dir: lang === 'ar' ? 'rtl' : 'ltr',
+      statusLabel: (k) => label('status', k, find(meta?.statuses, k)),
+      priorityLabel: (k) => label('priority', k, find(meta?.priorities, k)),
+      typeLabel: (k) => label('type', k, find(meta?.taskTypes, k)),
+      projectStatusLabel: (k) => label('pstatus', k, find(meta?.projectStatuses, k)),
+      callStatusLabel: (k) => label('callStatus', k, find(meta?.callStatuses, k)),
+      canUseCalls: user ? user.role === 'ceo' || meta?.roles[user.role]?.department === 'customer_service' : false,
       user,
       setUser,
       meta,
@@ -72,13 +130,13 @@ export function AppProvider({ children }) {
       toast,
       roleLabel,
       deptOf,
-      deptLabel: (d) => meta?.departments[d]?.label ?? d,
+      deptLabel: (d) => label('dept', d, meta?.departments[d]?.label),
       deptColor: (d) => meta?.departments[d]?.color ?? '#64748b',
       isManager: user ? meta?.roles[user.role]?.level !== 'member' : false,
       isUserAdmin: user ? meta?.userAdminRoles.includes(user.role) : false,
       userById: (id) => users.find((u) => u.id === id),
     };
-  }, [user, meta, users, booting, version, refresh, logout, notify, toast]);
+  }, [user, meta, users, booting, version, refresh, logout, notify, toast, lang, setLang]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

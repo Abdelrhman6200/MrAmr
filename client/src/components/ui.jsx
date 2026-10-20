@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useApp } from '../context.jsx';
+import { getActiveLocale } from '../i18n.js';
 
 export const initials = (name = '') =>
   name
@@ -19,20 +20,23 @@ export function Avatar({ name, color, size = 28, title }) {
 }
 
 export function StatusPill({ status }) {
-  const { meta } = useApp();
-  const label = meta.statuses.find((s) => s.key === status)?.label ?? status;
-  return <span className={`pill status-${status}`}>{label}</span>;
+  const { statusLabel } = useApp();
+  return <span className={`pill status-${status}`}>{statusLabel(status)}</span>;
 }
 
 export function PriorityTag({ priority }) {
-  const { meta } = useApp();
-  const label = meta.priorities.find((p) => p.key === priority)?.label ?? priority;
-  return <span className={`priority priority-${priority}`}>{label}</span>;
+  const { priorityLabel } = useApp();
+  return <span className={`priority priority-${priority}`}>{priorityLabel(priority)}</span>;
 }
 
 export function TypeTag({ type }) {
-  const { meta } = useApp();
-  return <span className="tag">{meta.taskTypes.find((t) => t.key === type)?.label ?? type}</span>;
+  const { typeLabel } = useApp();
+  return <span className="tag">{typeLabel(type)}</span>;
+}
+
+export function CallStatusPill({ status }) {
+  const { callStatusLabel } = useApp();
+  return <span className={`pill call-${status}`}>{callStatusLabel(status)}</span>;
 }
 
 export function DeptTag({ department }) {
@@ -57,28 +61,37 @@ export function isOverdue(task) {
 export function formatDate(iso) {
   if (!iso) return '';
   const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+  return d.toLocaleDateString(getActiveLocale(), { month: 'short', day: 'numeric', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+}
+
+export function formatDateTime(value) {
+  if (!value) return '';
+  const d = new Date(value.includes('T') || value.includes(' ') ? value.replace(' ', 'T') : `${value}T00:00`);
+  return d.toLocaleString(getActiveLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 export function DueDate({ task }) {
+  const { t } = useApp();
   if (!task.due_date) return <span className="muted">—</span>;
   const overdue = isOverdue(task);
   const today = task.due_date === todayISO();
-  return <span className={`due ${overdue ? 'overdue' : ''} ${today && task.status !== 'done' ? 'today' : ''}`}>{today ? 'Today' : formatDate(task.due_date)}</span>;
+  return <span className={`due ${overdue ? 'overdue' : ''} ${today && task.status !== 'done' ? 'today' : ''}`}>{today ? t('tasks.today') : formatDate(task.due_date)}</span>;
 }
 
 export function timeAgo(ts) {
   if (!ts) return '';
   const date = new Date(ts.includes('T') ? ts : `${ts.replace(' ', 'T')}Z`);
   const s = Math.round((Date.now() - date) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  if (s < 86400 * 7) return `${Math.floor(s / 86400)}d ago`;
-  return date.toLocaleDateString();
+  const rtf = new Intl.RelativeTimeFormat(getActiveLocale(), { numeric: 'auto', style: 'short' });
+  if (s < 60) return rtf.format(0, 'second');
+  if (s < 3600) return rtf.format(-Math.floor(s / 60), 'minute');
+  if (s < 86400) return rtf.format(-Math.floor(s / 3600), 'hour');
+  if (s < 86400 * 7) return rtf.format(-Math.floor(s / 86400), 'day');
+  return date.toLocaleDateString(getActiveLocale());
 }
 
 export function Modal({ title, onClose, children, wide, footer }) {
+  const { t } = useApp();
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -89,7 +102,7 @@ export function Modal({ title, onClose, children, wide, footer }) {
       <div className={`modal ${wide ? 'wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <header className="modal-head">
           <h2>{title}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Close">
+          <button className="icon-btn" onClick={onClose} aria-label={t('common.close')}>
             ✕
           </button>
         </header>
@@ -144,8 +157,9 @@ export function useTaskDialog() {
   return { current: params.get('task'), params, open, create, close };
 }
 
-export function UserSelect({ users, value, onChange, placeholder = 'Unassigned', allowEmpty = true, ...rest }) {
-  const { roleLabel } = useApp();
+export function UserSelect({ users, value, onChange, placeholder, allowEmpty = true, ...rest }) {
+  const { roleLabel, t } = useApp();
+  placeholder ??= t('common.unassigned');
   return (
     <select value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)} {...rest}>
       {allowEmpty && <option value="">{placeholder}</option>}

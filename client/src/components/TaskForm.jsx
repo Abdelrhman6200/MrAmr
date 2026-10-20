@@ -4,7 +4,7 @@ import { useApp } from '../context.jsx';
 import { Modal, UserSelect, useTaskDialog } from './ui.jsx';
 
 export default function TaskForm() {
-  const { meta, user, refresh, notify, users } = useApp();
+  const { meta, user, refresh, notify, users, t, typeLabel, priorityLabel, statusLabel } = useApp();
   const { params, close, open } = useTaskDialog();
   const [projects, setProjects] = useState([]);
   const [assignable, setAssignable] = useState([]);
@@ -38,13 +38,13 @@ export default function TaskForm() {
     setError('');
     setSaving(true);
     try {
-      const t = await api.post('/tasks', {
+      const created = await api.post('/tasks', {
         ...form,
         checklist: form.checklist.split('\n').map((s) => s.trim()).filter(Boolean),
       });
       refresh();
-      notify('Task created', 'success');
-      open(t.id);
+      notify(t('form.created'), 'success');
+      open(created.id);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -56,16 +56,16 @@ export default function TaskForm() {
 
   return (
     <Modal
-      title="New task"
+      title={t('form.newTask')}
       onClose={close}
       wide
       footer={
         <>
           <button className="btn" type="button" onClick={close}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button className="btn primary" form="task-form" disabled={saving}>
-            {saving ? 'Creating…' : 'Create task'}
+            {saving ? t('form.creating') : t('form.create')}
           </button>
         </>
       }
@@ -73,18 +73,18 @@ export default function TaskForm() {
       <form id="task-form" className="form" onSubmit={submit}>
         {error && <div className="alert error">{error}</div>}
         <label>
-          Title
-          <input autoFocus required value={form.title} onChange={set('title')} placeholder="e.g. Record Lesson 4: Momentum" />
+          {t('form.title')}
+          <input autoFocus required value={form.title} onChange={set('title')} placeholder={t('form.titlePh')} />
         </label>
         <label>
-          Description
-          <textarea rows={3} value={form.description} onChange={set('description')} placeholder="Details, links, acceptance criteria…" />
+          {t('form.description')}
+          <textarea rows={3} value={form.description} onChange={set('description')} placeholder={t('form.descriptionPh')} />
         </label>
         <div className="grid-3">
           <label>
-            Project
+            {t('form.project')}
             <select value={form.project_id ?? ''} onChange={(e) => set('project_id')(e.target.value ? Number(e.target.value) : null)}>
-              <option value="">No project</option>
+              <option value="">{t('filter.noProject')}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -93,59 +93,59 @@ export default function TaskForm() {
             </select>
           </label>
           <label>
-            Type
+            {t('form.type')}
             <select value={form.type} onChange={set('type')}>
-              {meta.taskTypes.map((t) => (
-                <option key={t.key} value={t.key}>
-                  {t.label}
+              {meta.taskTypes.map((x) => (
+                <option key={x.key} value={x.key}>
+                  {typeLabel(x.key)}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Priority
+            {t('form.priority')}
             <select value={form.priority} onChange={set('priority')}>
               {meta.priorities.map((p) => (
                 <option key={p.key} value={p.key}>
-                  {p.label}
+                  {priorityLabel(p.key)}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Assignee
+            {t('form.assignee')}
             <UserSelect users={assignable} value={form.assignee_id} onChange={set('assignee_id')} />
           </label>
           <label>
-            Reviewer / QA <span className="hint">(must approve before done)</span>
-            <UserSelect users={users} value={form.reviewer_id} onChange={set('reviewer_id')} placeholder="No review needed" />
+            {t('form.reviewer')} <span className="hint">{t('form.reviewerHint')}</span>
+            <UserSelect users={users} value={form.reviewer_id} onChange={set('reviewer_id')} placeholder={t('form.noReview')} />
           </label>
           <label>
-            Status
+            {t('form.status')}
             <select value={form.status} onChange={set('status')}>
               {statuses.map((s) => (
                 <option key={s.key} value={s.key} disabled={s.key === 'in_review' && !form.reviewer_id}>
-                  {s.label}
+                  {statusLabel(s.key)}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Due date
+            {t('form.due')}
             <input type="date" value={form.due_date} onChange={set('due_date')} />
           </label>
           <label>
-            Estimate (hours)
+            {t('form.estimate')}
             <input type="number" min="0" step="0.5" value={form.estimate_hours} onChange={set('estimate_hours')} />
           </label>
           <label>
-            Tags <span className="hint">(comma separated)</span>
+            {t('form.tags')} <span className="hint">{t('form.tagsHint')}</span>
             <input value={form.tags} onChange={set('tags')} placeholder="video, lesson" />
           </label>
         </div>
         <label>
-          Checklist <span className="hint">(one item per line)</span>
-          <textarea rows={3} value={form.checklist} onChange={set('checklist')} placeholder={'Script\nRecord\nEdit\nUpload'} />
+          {t('form.checklist')} <span className="hint">{t('form.checklistHint')}</span>
+          <textarea rows={3} value={form.checklist} onChange={set('checklist')} placeholder={t('form.checklistPh')} />
         </label>
       </form>
     </Modal>

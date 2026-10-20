@@ -18,7 +18,6 @@ export const TASK_SELECT = `
 
 export const PRIORITY_ORDER = `CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END`;
 
-const STATUS_LABEL = Object.fromEntries(STATUSES.map((s) => [s.key, s.label]));
 
 function normaliseTags(tags) {
   if (tags === undefined) return undefined;
@@ -31,11 +30,12 @@ export default function taskRoutes({ db, access }) {
   const userById = db.prepare('SELECT id, name, active FROM users WHERE id = ?');
   const projectById = db.prepare('SELECT * FROM projects WHERE id = ?');
   const logStmt = db.prepare('INSERT INTO activity (task_id, project_id, user_id, action, detail) VALUES (?, ?, ?, ?, ?)');
-  const notifyStmt = db.prepare('INSERT INTO notifications (user_id, type, message, task_id) VALUES (?, ?, ?, ?)');
+  const notifyStmt = db.prepare('INSERT INTO notifications (user_id, type, message, task_id, params) VALUES (?, ?, ?, ?, ?)');
 
   const log = (task, userId, action, detail = '') => logStmt.run(task.id, task.project_id ?? null, userId, action, detail);
-  const notify = (actor, userId, type, message, taskId) => {
-    if (userId != null && userId !== actor.id) notifyStmt.run(userId, type, message, taskId);
+  // `message` is the English fallback; `params` lets the client render it in any language.
+  const notify = (actor, userId, type, message, taskId, title) => {
+    if (userId != null && userId !== actor.id) notifyStmt.run(userId, type, message, taskId, JSON.stringify({ actor: actor.name, title }));
   };
 
   const raw = (id) => db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
@@ -186,8 +186,8 @@ export default function taskRoutes({ db, access }) {
         );
       const task = raw(Number(info.lastInsertRowid));
       log(task, req.user.id, 'created', title);
-      notify(req.user, assigneeId, 'assigned', `${req.user.name} assigned you "${title}"`, task.id);
-      if (status === 'in_review') notify(req.user, reviewerId, 'review_requested', `${req.user.name} requested your review on "${title}"`, task.id);
+      notify(req.user, assigneeId, 'assigned', `${req.user.name} assigned you "${title}"`, task.id, title);
+      if (status === 'in_review') notify(req.user, reviewerId, 'review_requested', `${req.user.name} requested your review on "${title}"`, task.id, title);
       if (Array.isArray(b.checklist)) {
         const ins = db.prepare('INSERT INTO checklist_items (task_id, text, position) VALUES (?, ?, ?)');
         b.checklist.filter((s) => String(s).trim()).forEach((s, i) => ins.run(task.id, String(s).trim(), i));
@@ -245,7 +245,7 @@ export default function taskRoutes({ db, access }) {
       const title = updated.title;
       for (const k of changed) {
         if (k === 'completed_at' || k === 'description') continue;
-        if (k === 'status') log(updated, req.user.id, 'status', `${STATUS_LABEL[t.status]} → ${STATUS_LABEL[f.status]}`);
+        if (k === 'status') log(updated, req.user.id, 'status', `${t.status}→${f.status}`);
         else if (k === 'assignee_id') log(updated, req.user.id, 'assigned', f.assignee_id ? userById.get(f.assignee_id).name : 'Unassigned');
         else if (k === 'reviewer_id') log(updated, req.user.id, 'reviewer', f.reviewer_id ? userById.get(f.reviewer_id).name : 'None');
         else if (k === 'project_id') log(updated, req.user.id, 'updated', `project: ${f.project_id ? projectById.get(f.project_id).name : 'none'}`);
@@ -253,14 +253,14 @@ export default function taskRoutes({ db, access }) {
       }
       if (changed.includes('description')) log(updated, req.user.id, 'updated', 'description');
 
-      if (changed.includes('assignee_id')) notify(req.user, f.assignee_id, 'assigned', `${req.user.name} assigned you "${title}"`, t.id);
+      if (changed.includes('assignee_id')) notify(req.user, f.assignee_id, 'assigned', `${req.user.name} assigned you "${title}"`, t.id, title);
       if (changed.includes('status')) {
-        if (f.status === 'in_review') notify(req.user, reviewerId, 'review_requested', `${req.user.name} requested your review on "${title}"`, t.id);
+        if (f.status === 'in_review') notify(req.user, reviewerId, 'review_requested', `${req.user.name} requested your review on "${title}"`, t.id, title);
         if (f.status === 'done') {
-          notify(req.user, t.reporter_id, 'completed', `${req.user.name} completed "${title}"`, t.id);
-          notify(req.user, updated.assignee_id, 'completed', `${req.user.name} marked "${title}" done`, t.id);
+          notify(req.user, t.reporter_id, 'completed', `${req.user.name} completed "${title}"`, t.id, title);
+          notify(req.user, updated.assignee_id, 'completed', `${req.user.name} marked "${title}" done`, t.id, title);
         }
-        if (f.status === 'blocked') notify(req.user, t.reporter_id, 'blocked', `"${title}" is blocked`, t.id);
+        if (f.status === 'blocked') notify(req.user, t.reporter_id, 'blocked', `"${title}" is blocked`, t.id, title);
       }
     });
     res.json({ ...full(t.id), ...perms(req.user, raw(t.id)) });
@@ -285,12 +285,12 @@ export default function taskRoutes({ db, access }) {
       if (decision === 'approve') {
         db.prepare("UPDATE tasks SET status = 'done', completed_at = ?, updated_at = datetime('now') WHERE id = ?").run(new Date().toISOString(), t.id);
         log(t, req.user.id, 'approved', comment);
-        notify(req.user, t.assignee_id, 'approved', `${req.user.name} approved "${t.title}"`, t.id);
-        notify(req.user, t.reporter_id, 'approved', `${req.user.name} approved "${t.title}"`, t.id);
+        notify(req.user, t.assignee_id, 'approved', `${req.user.name} approved "${t.title}"`, t.id, t.title);
+        notify(req.user, t.reporter_id, 'approved', `${req.user.name} approved "${t.title}"`, t.id, t.title);
       } else {
         db.prepare("UPDATE tasks SET status = 'in_progress', updated_at = datetime('now') WHERE id = ?").run(t.id);
         log(t, req.user.id, 'changes_requested', comment);
-        notify(req.user, t.assignee_id, 'changes_requested', `${req.user.name} requested changes on "${t.title}"`, t.id);
+        notify(req.user, t.assignee_id, 'changes_requested', `${req.user.name} requested changes on "${t.title}"`, t.id, t.title);
       }
       if (comment) {
         const prefix = decision === 'approve' ? '✅ Approved' : '🔁 Changes requested';
@@ -306,7 +306,7 @@ export default function taskRoutes({ db, access }) {
     const body = requiredString(req.body?.body, 'comment', 5000);
     const info = db.prepare('INSERT INTO comments (task_id, user_id, body) VALUES (?, ?, ?)').run(t.id, req.user.id, body);
     for (const uid of new Set([t.assignee_id, t.reporter_id, t.reviewer_id])) {
-      notify(req.user, uid, 'comment', `${req.user.name} commented on "${t.title}"`, t.id);
+      notify(req.user, uid, 'comment', `${req.user.name} commented on "${t.title}"`, t.id, t.title);
     }
     const c = db
       .prepare('SELECT c.*, u.name AS user_name, u.avatar_color FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?')
