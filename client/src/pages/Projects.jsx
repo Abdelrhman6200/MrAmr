@@ -15,7 +15,7 @@ export function ProjectForm({ project, onClose, onSaved }) {
     owner_id: project?.owner_id || user.id,
     start_date: project?.start_date || '',
     due_date: project?.due_date || '',
-    color: project?.color || '#6366f1',
+    color: project?.color || '#16a34a',
     member_ids: project?.members?.map((m) => m.id) || [user.id],
   }));
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e?.target ? e.target.value : e }));

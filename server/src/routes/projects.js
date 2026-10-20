@@ -3,7 +3,7 @@ import { transaction } from '../db.js';
 import { badRequest, forbidden, notFound, oneOf, optionalDate, optionalId, requiredString } from '../http.js';
 import { DEPARTMENTS, PROJECT_STATUSES, departmentOf, isManagerRole, keys } from '../meta.js';
 
-const PROJECT_COLORS = ['#6366f1', '#0ea5e9', '#14b8a6', '#22c55e', '#f97316', '#ec4899', '#8b5cf6', '#eab308'];
+const PROJECT_COLORS = ['#16a34a', '#6366f1', '#0ea5e9', '#14b8a6', '#22c55e', '#f97316', '#ec4899', '#8b5cf6', '#eab308'];
 
 export default function projectRoutes({ db, access }) {
   const r = Router();
