@@ -4,7 +4,7 @@ import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { ActivityText } from '../components/TaskDetail.jsx';
 import { TaskCard } from '../components/TaskViews.jsx';
-import { Avatar, Empty, timeAgo } from '../components/ui.jsx';
+import { Avatar, Empty, formatDate, timeAgo } from '../components/ui.jsx';
 
 function Stat({ label, value, tone, to }) {
   const body = (
@@ -26,11 +26,17 @@ export default function Dashboard() {
   const { user, version, roleLabel, isManager, t, canUseCalls } = useApp();
   const [data, setData] = useState(null);
   const [calls, setCalls] = useState(null);
+  const [pendingRound, setPendingRound] = useState(null);
 
   useEffect(() => {
     api.get('/dashboard').then(setData).catch(() => {});
     if (canUseCalls) api.get('/calls/mine').then(setCalls).catch(() => {});
-  }, [version, canUseCalls]);
+    if (user.role === 'instructor')
+      api
+        .get('/centers/rounds')
+        .then((r) => setPendingRound(r.rounds.find((x) => x.status === 'open' && !x.mine) || null))
+        .catch(() => {});
+  }, [version, canUseCalls, user.role]);
 
   if (!data) return <div className="muted">{t('common.loading')}</div>;
   const c = data.counts;
@@ -46,6 +52,13 @@ export default function Dashboard() {
           <p className="muted">{user.title || roleLabel(user.role)}</p>
         </div>
       </div>
+
+      {pendingRound && (
+        <Link to="/centers?tab=mine" className="alert warning banner">
+          🗓 {t('notif.availability_reminder', { title: pendingRound.title })}
+          {pendingRound.due_date && <> · {t('avail.dueOn', { date: formatDate(pendingRound.due_date) })}</>} →
+        </Link>
+      )}
 
       <div className="stats">
         <Stat label={t('dash.open')} value={open} to="/tasks?scope=mine" />

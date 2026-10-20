@@ -11,6 +11,7 @@ const NAV = [
   { to: '/tasks', key: 'nav.tasks', icon: '☑' },
   { to: '/projects', key: 'nav.projects', icon: '▤' },
   { to: '/calendar', key: 'nav.calendar', icon: '▦' },
+  { to: '/centers', key: 'nav.centers', icon: '⌂' },
   { to: '/calls', key: 'nav.calls', icon: '☎', calls: true },
   { to: '/team', key: 'nav.team', icon: '☷' },
   { to: '/reports', key: 'nav.reports', icon: '▥' },
@@ -60,7 +61,7 @@ function Notifications() {
   };
 
   // Rebuild the message in the current language when we have its parts.
-  const text = (n) => (n.params ? t(`notif.${n.type}`, n.params) : n.message);
+  const text = (n) => (n.params ? t(`notif.${n.type}`, { ...n.params, day: n.params.day && t(`day.${n.params.day}`) }) : n.message);
 
   return (
     <div className="notif" ref={ref}>

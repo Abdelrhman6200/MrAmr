@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { requireAuth } from './auth.js';
 import { makeAccess } from './access.js';
 import { HttpError } from './http.js';
-import { DEPARTMENTS, ROLES, STATUSES, PRIORITIES, TASK_TYPES, PROJECT_STATUSES, USER_ADMIN_ROLES, CALL_STATUSES } from './meta.js';
+import { DEPARTMENTS, ROLES, STATUSES, PRIORITIES, TASK_TYPES, PROJECT_STATUSES, USER_ADMIN_ROLES, CALL_STATUSES, CENTER_ADMIN_ROLES, WEEKDAYS } from './meta.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import projectRoutes from './routes/projects.js';
@@ -12,6 +12,7 @@ import taskRoutes from './routes/tasks.js';
 import dashboardRoutes from './routes/dashboard.js';
 import notificationRoutes from './routes/notifications.js';
 import callRoutes from './routes/calls.js';
+import centerRoutes from './routes/centers.js';
 
 export function createApp({ db, secret, staticDir }) {
   const app = express();
@@ -24,7 +25,7 @@ export function createApp({ db, secret, staticDir }) {
   const api = express.Router();
   api.get('/health', (_req, res) => res.json({ ok: true }));
   api.get('/meta', (_req, res) =>
-    res.json({ departments: DEPARTMENTS, roles: ROLES, statuses: STATUSES, priorities: PRIORITIES, taskTypes: TASK_TYPES, projectStatuses: PROJECT_STATUSES, userAdminRoles: USER_ADMIN_ROLES, callStatuses: CALL_STATUSES }),
+    res.json({ departments: DEPARTMENTS, roles: ROLES, statuses: STATUSES, priorities: PRIORITIES, taskTypes: TASK_TYPES, projectStatuses: PROJECT_STATUSES, userAdminRoles: USER_ADMIN_ROLES, callStatuses: CALL_STATUSES, centerAdminRoles: CENTER_ADMIN_ROLES, weekdays: WEEKDAYS }),
   );
   api.use('/auth', authRoutes(ctx));
   api.use(requireAuth(db, secret));
@@ -34,6 +35,7 @@ export function createApp({ db, secret, staticDir }) {
   api.use('/dashboard', dashboardRoutes(ctx));
   api.use('/notifications', notificationRoutes(ctx));
   api.use('/calls', callRoutes(ctx));
+  api.use('/centers', centerRoutes(ctx));
   api.use((_req, _res, next) => next(new HttpError(404, 'Unknown API route')));
   app.use('/api', api);
 
@@ -45,7 +47,7 @@ export function createApp({ db, secret, staticDir }) {
   app.use((err, _req, res, _next) => {
     const status = err.status || (err.type === 'entity.parse.failed' ? 400 : 500);
     if (status >= 500) console.error(err);
-    res.status(status).json({ error: status >= 500 ? 'Internal server error' : err.message });
+    res.status(status).json({ error: status >= 500 ? 'Internal server error' : err.message, code: err.code, details: err.details });
   });
 
   return app;

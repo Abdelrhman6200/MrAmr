@@ -30,6 +30,12 @@ export const ROLES = {
 // Roles allowed to create/edit user accounts.
 export const USER_ADMIN_ROLES = ['ceo', 'ops_manager'];
 
+// Roles that manage offline centers, availability rounds and center schedules.
+export const CENTER_ADMIN_ROLES = ['ceo', 'ops_manager', 'head_of_content'];
+
+// The working week starts on Saturday.
+export const WEEKDAYS = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'];
+
 export const STATUSES = [
   { key: 'todo', label: 'To Do' },
   { key: 'in_progress', label: 'In Progress' },

@@ -12,6 +12,7 @@ import Reports from './pages/Reports.jsx';
 import Users from './pages/Users.jsx';
 import Settings from './pages/Settings.jsx';
 import Calls from './pages/Calls.jsx';
+import Centers from './pages/Centers.jsx';
 
 function Routed() {
   const { user, booting, meta } = useApp();
@@ -26,6 +27,7 @@ function Routed() {
         <Route path="/projects/:id" element={<ProjectDetail />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/calls" element={<Calls />} />
+        <Route path="/centers" element={<Centers />} />
         <Route path="/team" element={<Team />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/users" element={<Users />} />

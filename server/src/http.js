@@ -1,7 +1,10 @@
 export class HttpError extends Error {
-  constructor(status, message) {
+  // `code`/`details` let the client show a translated, specific message.
+  constructor(status, message, code, details) {
     super(message);
     this.status = status;
+    this.code = code;
+    this.details = details;
   }
 }
 

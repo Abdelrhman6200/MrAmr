@@ -135,6 +135,66 @@ CREATE TABLE IF NOT EXISTS call_logs (
 );
 `;
 
+const CENTERS_SCHEMA = `
+CREATE TABLE IF NOT EXISTS centers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  city TEXT DEFAULT '',
+  address TEXT DEFAULT '',
+  phone TEXT DEFAULT '',
+  contact_name TEXT DEFAULT '',
+  capacity INTEGER NOT NULL DEFAULT 1,
+  notes TEXT DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS availability_rounds (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  starts_on TEXT,
+  ends_on TEXT,
+  due_date TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  notes TEXT DEFAULT '',
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One submission per instructor per round. slots: [{day, start, end}].
+CREATE TABLE IF NOT EXISTS availability (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  round_id INTEGER NOT NULL REFERENCES availability_rounds(id) ON DELETE CASCADE,
+  instructor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  slots TEXT NOT NULL DEFAULT '[]',
+  center_ids TEXT NOT NULL DEFAULT '[]',
+  max_sessions INTEGER,
+  notes TEXT DEFAULT '',
+  submitted_by INTEGER REFERENCES users(id),
+  submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (round_id, instructor_id)
+);
+
+-- A recurring weekly session: instructor teaches at a center on a weekday.
+CREATE TABLE IF NOT EXISTS center_assignments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  center_id INTEGER NOT NULL REFERENCES centers(id) ON DELETE CASCADE,
+  instructor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  day TEXT NOT NULL,
+  start_time TEXT NOT NULL,
+  end_time TEXT NOT NULL,
+  subject TEXT DEFAULT '',
+  round_id INTEGER REFERENCES availability_rounds(id) ON DELETE SET NULL,
+  starts_on TEXT,
+  ends_on TEXT,
+  notes TEXT DEFAULT '',
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_assign_instructor ON center_assignments(instructor_id, day);
+CREATE INDEX IF NOT EXISTS idx_assign_center ON center_assignments(center_id, day);
+`;
+
 // Columns added after the first release; ALTER existing databases in place.
 function migrate(db) {
   const cols = db.prepare('PRAGMA table_info(notifications)').all().map((c) => c.name);
@@ -150,6 +210,7 @@ export function openDb(file) {
   db.exec('PRAGMA foreign_keys = ON;');
   if (file !== ':memory:') db.exec('PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  db.exec(CENTERS_SCHEMA);
   migrate(db);
   return db;
 }

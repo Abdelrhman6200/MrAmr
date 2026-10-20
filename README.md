@@ -62,6 +62,9 @@ This is only the demo setup. The real hierarchy is data: the Head of Company or 
 - **Review / QA workflow**: give a task a reviewer (for example Content Quality on an instructor's lesson). The assignee moves it to *In Review*. Only the reviewer, or someone above the reviewer, can **Approve** it (the task becomes Done) or **Request changes** (the task goes back to In Progress with the feedback). Nobody can skip the review and mark the task done directly.
 - **Projects**: grouped by department, with owners, members, progress, overdue counts, a board/list/activity view and a status (planning → active → on hold → completed → archived).
 - **Calls (Customer Service)**: upload an Excel (`.xlsx`) or CSV sheet of students or customers. The app guesses which columns hold the name, phone and email, recognising English and Arabic headings, and keeps every other column. The Head of Customer Service can split the calls evenly between chosen agents (whoever has the fewest open calls gets theirs first), assign selected rows, or reassign single calls. Agents work through their own **My calls** queue: tap to dial, then log *Reached*, *No answer*, *Call back later* (at a set time), *Not interested* or *Wrong number*, with a note. Each list shows progress per agent and per outcome and can be exported back to CSV with the results.
+- **Offline centers**: a table of centers (city, address, phone, contact person, number of rooms) and a weekly schedule grid of centers × days, starting on Saturday.
+  - *Collecting availability*: the Head of Company, Operations Manager or Head of Content sends an availability request (for example "Term 2", with a reply-by date). Every instructor is notified and fills in their weekly time slots, the centers they prefer and the most sessions they want per week. Managers see who has submitted and who hasn't, can send reminders, and can enter availability on an instructor's behalf.
+  - *Assigning to centers*: click a cell in the schedule to assign an instructor. The instructor list shows who is available at that time and who prefers that center. Double-booking an instructor is always blocked. Assigning outside their availability, over their weekly maximum, or into a center with no free room shows a warning with an "Assign anyway" option. Instructors are notified and see their own sessions under **My availability & sessions**.
 - **English and Arabic**: switch language from the top bar, the login screen or your profile. Arabic flips the whole layout right-to-left. The choice is saved to your account.
 - **Calendar**: a month view of due dates for you, your team or everything you can see. Double-click a day to create a task due that day.
 - **Team**: a collapsible org chart and a by-department directory.
@@ -81,6 +84,7 @@ These rules are in `server/src/access.js`.
 | **Approve reviews** | The reviewer, their managers, or the Head of Company. |
 | **Create projects** | Managers and the Head of Company. |
 | **Calls** | Only the Customer Service team and the Head of Company. Agents can upload lists, claim unassigned calls and log their own calls. The Head of Customer Service (or the Head of Company) assigns and reassigns calls to anyone. |
+| **Centers** | Everyone can see the centers and the weekly schedule. The Head of Company, Operations Manager and Head of Content manage centers, collect availability and assign instructors. Instructors submit their own availability. |
 | **Manage users** | The Head of Company and the Operations Manager. Only the Head of Company can create or edit Head of Company accounts. |
 
 ## Project layout
@@ -92,13 +96,14 @@ server/src/
   access.js         hierarchy-based permission rules
   meta.js           roles, departments, statuses, priorities, task types
   db.js             SQLite schema
-  routes/           auth, users, projects, tasks, dashboard/reports, notifications, calls
+  routes/           auth, users, projects, tasks, dashboard/reports, notifications, calls, centers
   seed.js           demo organisation
 server/test/        API tests (node:test)
 client/src/
-  pages/            Dashboard, Tasks, Projects, ProjectDetail, Calendar, Calls, Team, Reports, Users, Settings
+  pages/            Dashboard, Tasks, Projects, ProjectDetail, Calendar, Calls, Centers, Team, Reports, Users, Settings
   components/       Layout, TaskDetail, TaskForm, board/list views, UI primitives
   pages/Calls.jsx   call lists, sheet upload, agent queue
+  pages/Centers.jsx centers, availability collection, weekly center schedule
   i18n.js           English and Arabic strings
   sheet.js          Excel/CSV reading, column detection, CSV export
 ```

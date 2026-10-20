@@ -17,9 +17,11 @@ export const setToken = (t) => {
 };
 
 export class ApiError extends Error {
-  constructor(status, message) {
+  constructor(status, message, code, details) {
     super(message);
     this.status = status;
+    this.code = code;
+    this.details = details;
   }
 }
 
@@ -39,7 +41,7 @@ async function request(method, path, body) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401 && path !== '/auth/login') onUnauthorized();
-    throw new ApiError(res.status, translateMessage(data.error || res.statusText));
+    throw new ApiError(res.status, translateMessage(data.error || res.statusText), data.code, data.details);
   }
   return data;
 }
@@ -53,5 +55,6 @@ export const api = {
   get: (path, params) => request('GET', path + qs(params), undefined),
   post: (path, body) => request('POST', path, body || {}),
   patch: (path, body) => request('PATCH', path, body),
+  put: (path, body) => request('PUT', path, body),
   del: (path) => request('DELETE', path),
 };

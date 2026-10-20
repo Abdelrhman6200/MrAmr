@@ -178,6 +178,42 @@ export function seed(db) {
       if (called) insLog.run(cid, ids[who], status, note);
     }
 
+    // Offline centers, availability and weekly schedule
+    const insCenter = db.prepare('INSERT INTO centers (name, city, address, phone, contact_name, capacity) VALUES (?, ?, ?, ?, ?, ?)');
+    const center = (...v) => Number(insCenter.run(...v).lastInsertRowid);
+    const nasr = center('Nasr City Center', 'Cairo', '12 Abbas El Akkad St.', '+20 2 2401 0001', 'Mahmoud Saeed', 3);
+    const maadi = center('Maadi Center', 'Cairo', 'Road 9, Maadi', '+20 2 2358 0002', 'Dalia Ashraf', 2);
+    const heliopolis = center('Heliopolis Center', 'Cairo', '45 El Merghany St.', '+20 2 2415 0003', 'Sherif Lotfy', 2);
+    center('Smouha Center', 'Alexandria', '7 Fawzy Moaz St., Smouha', '+20 3 4250 0004', 'Rania Adel', 2);
+
+    const round = Number(
+      db
+        .prepare('INSERT INTO availability_rounds (title, starts_on, ends_on, due_date, notes, created_by) VALUES (?, ?, ?, ?, ?, ?)')
+        .run('Term 2 — center sessions', day(14), day(120), day(5), 'Add every weekly slot you can teach in person.', ids.hoc).lastInsertRowid,
+    );
+    const insAvail = db.prepare('INSERT INTO availability (round_id, instructor_id, slots, center_ids, max_sessions, notes, submitted_by) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    insAvail.run(round, ids.ins1, JSON.stringify([
+      { day: 'sat', start: '10:00', end: '16:00' },
+      { day: 'mon', start: '16:00', end: '21:00' },
+      { day: 'wed', start: '16:00', end: '21:00' },
+    ]), JSON.stringify([nasr, heliopolis]), 4, 'Prefer east Cairo centers.', ids.ins1);
+    insAvail.run(round, ids.ins2, JSON.stringify([
+      { day: 'sun', start: '12:00', end: '20:00' },
+      { day: 'tue', start: '12:00', end: '20:00' },
+      { day: 'thu', start: '15:00', end: '21:00' },
+    ]), JSON.stringify([maadi, nasr]), 3, '', ids.ins2);
+    for (const i of ['ins1', 'ins2', 'ins3']) {
+      db.prepare('INSERT INTO notifications (user_id, type, message, link, params) VALUES (?, ?, ?, ?, ?)').run(
+        ids[i], 'availability_requested', 'Karim Fathy asked for your availability: "Term 2 — center sessions"', '/centers?tab=mine',
+        JSON.stringify({ actor: 'Karim Fathy', title: 'Term 2 — center sessions' }),
+      );
+    }
+    const insAssign = db.prepare('INSERT INTO center_assignments (center_id, instructor_id, day, start_time, end_time, subject, round_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    insAssign.run(nasr, ids.ins1, 'sat', '10:00', '12:00', 'Physics — Grade 12', round, ids.hoc);
+    insAssign.run(heliopolis, ids.ins1, 'mon', '17:00', '19:00', 'Physics — Grade 11', round, ids.hoc);
+    insAssign.run(maadi, ids.ins2, 'sun', '14:00', '16:00', 'Chemistry — Grade 12', round, ids.hoc);
+    insAssign.run(nasr, ids.ins2, 'thu', '17:00', '19:00', 'Chemistry — Grade 11', round, ids.hoc);
+
     const insNote = db.prepare('INSERT INTO notifications (user_id, type, message, task_id, params) VALUES (?, ?, ?, ?, ?)');
     insNote.run(ids.cq, 'review_requested', 'Nour Adel requested your review on "Record Lesson 2: Newton’s Laws"', lesson2, JSON.stringify({ actor: 'Nour Adel', title: 'Record Lesson 2: Newton’s Laws' }));
     insNote.run(ids.sys, 'assigned', 'Rana Kamal assigned you "Video player freezes on Safari"', safari, JSON.stringify({ actor: 'Rana Kamal', title: 'Video player freezes on Safari' }));
