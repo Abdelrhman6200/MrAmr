@@ -1,0 +1,113 @@
+# TaskFlow
+
+Task and project management for an education-content company. It's built around the org chart: instructors, content quality, marketing, operations, customer service and product. Who can see work, assign it and approve it all comes from the reporting hierarchy.
+
+## Quick start
+
+Requires **Node.js 22.13+**. The database is Node's built-in SQLite, so there are no native modules to compile.
+
+```bash
+npm install
+npm run build     # build the web app
+npm start         # http://localhost:3001
+```
+
+For development, with hot reload for both the API and the UI:
+
+```bash
+npm run dev       # UI on http://localhost:5173 (proxies /api to :3001)
+```
+
+On first start the app loads a demo organisation. **Every demo account uses the password `password123`.** The login screen has one-click buttons for each role. To wipe the data and reload the demo, run `npm run seed`.
+
+| Role | Email |
+| --- | --- |
+| Head of Company | ceo@taskflow.local |
+| Operations Manager | ops@taskflow.local |
+| Head of Content | content.head@taskflow.local |
+| Instructor | instructor1@taskflow.local (also 2, 3) |
+| Marketing Manager | marketing@taskflow.local |
+| Marketing Team | marketing1@taskflow.local, marketing2@taskflow.local |
+| Systems Operations Lead | sysops@taskflow.local |
+| Content Quality | quality@taskflow.local |
+| Ops QC | qc@taskflow.local |
+| Head of Customer Service | cs.head@taskflow.local |
+| Customer Service | support1@taskflow.local, support2@taskflow.local |
+| Product Owner | product@taskflow.local |
+
+## Organisation
+
+```
+Head of Company
+├── Operations Manager
+│   └── Head of Content
+│       └── Instructors
+├── Marketing Manager
+│   └── Marketing team
+├── Systems Operations Lead
+│   ├── Content Quality
+│   └── Ops QC
+├── Head of Customer Service
+│   └── Customer Service agents
+└── Product Owner
+```
+
+This is only the demo setup. The real hierarchy is data: the Head of Company or the Operations Manager can add people and change who reports to whom on the **Users** page. The app rejects any change that would create a reporting loop.
+
+## Features
+
+- **Dashboard**: your open, overdue and blocked work, a review queue, "waiting on others", team workload for managers, and recent activity.
+- **Tasks**: a Kanban board (drag cards between columns) or a list view. You can filter by scope (mine, created, to review, my team), status, priority, type, project, assignee and due date. Filters are kept in the URL, so you can share a filtered view.
+- **Task details**: inline editing, a checklist, comments, an activity log, tags, estimates and due dates.
+- **Review / QA workflow**: give a task a reviewer (for example Content Quality on an instructor's lesson). The assignee moves it to *In Review*. Only the reviewer, or someone above the reviewer, can **Approve** it (the task becomes Done) or **Request changes** (the task goes back to In Progress with the feedback). Nobody can skip the review and mark the task done directly.
+- **Projects**: grouped by department, with owners, members, progress, overdue counts, a board/list/activity view and a status (planning → active → on hold → completed → archived).
+- **Calendar**: a month view of due dates for you, your team or everything you can see. Double-click a day to create a task due that day.
+- **Team**: a collapsible org chart and a by-department directory.
+- **Reports**: completion by department, status and priority breakdowns, weekly created-vs-completed throughput, and project health.
+- **Notifications**: you're notified when you're assigned a task, when your review is requested, when work is approved or sent back for changes, when someone comments, and when work is completed or blocked.
+- Works on phones (collapsible sidebar) and supports dark mode.
+
+## Access rules
+
+These rules are in `server/src/access.js`.
+
+| | Rule |
+| --- | --- |
+| **See tasks** | The Head of Company sees everything. Everyone else sees tasks where they or anyone in their reporting line is the assignee, creator or reviewer, plus all tasks in projects they own or belong to. Hidden tasks return 404. |
+| **Assign tasks** | To yourself, your reporting line, members of the task's project, or **any manager**. Managers are included so that, for example, Customer Service can send a bug to the Product Owner. |
+| **Edit tasks** | The assignee, creator, reviewer, their managers, or the project owner. |
+| **Approve reviews** | The reviewer, their managers, or the Head of Company. |
+| **Create projects** | Managers and the Head of Company. |
+| **Manage users** | The Head of Company and the Operations Manager. Only the Head of Company can create or edit Head of Company accounts. |
+
+## Project layout
+
+```
+server/src/
+  index.js          entry point (opens DB, seeds if empty, serves API + built UI)
+  app.js            Express app factory
+  access.js         hierarchy-based permission rules
+  meta.js           roles, departments, statuses, priorities, task types
+  db.js             SQLite schema
+  routes/           auth, users, projects, tasks, dashboard/reports, notifications
+  seed.js           demo organisation
+server/test/        API tests (node:test)
+client/src/
+  pages/            Dashboard, Tasks, Projects, ProjectDetail, Calendar, Team, Reports, Users, Settings
+  components/       Layout, TaskDetail, TaskForm, board/list views, UI primitives
+```
+
+## Configuration
+
+| Variable | Default | |
+| --- | --- | --- |
+| `PORT` | `3001` | HTTP port |
+| `DATA_DIR` | `./data` | where the SQLite database lives |
+| `DB_FILE` | `$DATA_DIR/taskflow.db` | database file |
+| `AUTH_SECRET` | generated into `$DATA_DIR/.secret` | signs login tokens. **Set this in production.** |
+
+## Tests
+
+```bash
+npm test
+```
