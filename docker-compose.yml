@@ -16,6 +16,14 @@ services:
       TZ: ${TZ:-Africa/Cairo}
       # Set to 1 when running behind a reverse proxy such as nginx or Caddy.
       TRUST_PROXY: ${TRUST_PROXY:-}
+      # Optional email (password resets + notification emails).
+      APP_URL: ${APP_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      MAIL_FROM: ${MAIL_FROM:-}
 
 volumes:
   taskflow-data:

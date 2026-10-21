@@ -266,6 +266,54 @@ function ImportModal({ people, onClose, onDone }) {
   );
 }
 
+function ResetLink({ user }) {
+  const { t } = useApp();
+  const [link, setLink] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState('');
+  const create = async () => {
+    setError('');
+    try {
+      const res = await api.post(`/users/${user.id}/reset-link`);
+      setLink({ url: `${window.location.origin}/reset?token=${res.token}`, hours: res.hours });
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+  const copy = async (e) => {
+    try {
+      await navigator.clipboard.writeText(link.url);
+    } catch {
+      // Clipboard API unavailable (e.g. plain http): copy from the selected field instead.
+      const input = e.currentTarget.parentElement.querySelector('input');
+      input.select();
+      if (!document.execCommand('copy')) return;
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="reset-link">
+      {error && <div className="alert error">{error}</div>}
+      {!link ? (
+        <button type="button" className="btn" onClick={create}>
+          🔑 {t('users.resetLink')}
+        </button>
+      ) : (
+        <>
+          <div className="row gap">
+            <input readOnly dir="ltr" value={link.url} onFocus={(e) => e.target.select()} />
+            <button type="button" className="btn" onClick={copy}>
+              {copied ? t('users.copied') : t('users.copy')}
+            </button>
+          </div>
+          <div className="hint">{t('users.resetLinkHint', { hours: link.hours })}</div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function UserForm({ editing, people, onClose, onSaved }) {
   const { meta, user: me, t, roleLabel, deptLabel } = useApp();
   const [error, setError] = useState('');
@@ -347,6 +395,7 @@ function UserForm({ editing, people, onClose, onSaved }) {
             <input type="checkbox" checked={form.active} onChange={set('active')} /> {t('users.activeLabel')}
           </label>
         )}
+        {editing && editing.id !== me.id && editing.active && <ResetLink user={editing} />}
       </form>
     </Modal>
   );

@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { api } from '../api.js';
+import { api, setToken } from '../api.js';
 import { useApp } from '../context.jsx';
 import { Avatar, DeptTag } from '../components/ui.jsx';
 import { LanguageSwitch } from '../components/Layout.jsx';
 
 export default function Settings() {
-  const { user, setUser, roleLabel, deptOf, userById, notify, refresh, t } = useApp();
+  const { user, setUser, roleLabel, deptOf, userById, notify, refresh, t, meta } = useApp();
   const [name, setName] = useState(user.name);
   const [title, setTitle] = useState(user.title || '');
   const [pw, setPw] = useState({ currentPassword: '', newPassword: '' });
@@ -28,9 +28,11 @@ export default function Settings() {
     e.preventDefault();
     setError('');
     try {
-      await api.post('/auth/change-password', pw);
+      const res = await api.post('/auth/change-password', pw);
+      // Other devices are signed out; keep this one signed in with the new token.
+      setToken(res.token);
       setPw({ currentPassword: '', newPassword: '' });
-      notify(t('settings.changed'), 'success');
+      notify(t('settings.signedOutOthers'), 'success');
     } catch (err) {
       setError(err.message);
     }
@@ -71,6 +73,28 @@ export default function Settings() {
         <h2>{t('settings.language')}</h2>
         <p className="muted">{t('settings.languageHint')}</p>
         <LanguageSwitch />
+      </section>
+      <section className="panel">
+        <h2>{t('settings.emailNotif')}</h2>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={user.email_notifications !== false}
+            onChange={async (e) => {
+              // Flip immediately; undo if the server refuses.
+              const on = e.target.checked;
+              setUser({ ...user, email_notifications: on });
+              try {
+                await api.patch(`/users/${user.id}`, { email_notifications: on });
+              } catch (err) {
+                setUser({ ...user, email_notifications: !on });
+                notify(err.message, 'error');
+              }
+            }}
+          />{' '}
+          {t('settings.emailNotifHint', { email: user.email })}
+        </label>
+        {!meta.emailEnabled && <p className="muted sm">{t('settings.emailOff')}</p>}
       </section>
       <section className="panel">
         <h2>{t('settings.changePassword')}</h2>

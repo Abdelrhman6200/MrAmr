@@ -1834,7 +1834,66 @@ a.stat:hover {
   font-variant-numeric: tabular-nums;
 }
 
+.sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sheet-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.sheet-head h2 {
+  font-size: 20px;
+  margin: 0 0 4px;
+}
+.sheet-head .extra {
+  min-width: 260px;
+  flex: 0 1 380px;
+}
+.sheet-table th {
+  width: 110px;
+  vertical-align: top;
+  color: var(--text);
+  font-size: 14px;
+}
+.sheet-session {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.sheet-session:last-child {
+  border-bottom: 0;
+}
+.sheet-foot {
+  text-align: end;
+}
+
 @media print {
+  body.printing-sheet #root {
+    display: none !important;
+  }
+  body.printing-sheet .sheet-portal .modal-backdrop {
+    position: static;
+    background: none;
+    padding: 0;
+    overflow: visible;
+  }
+  body.printing-sheet .modal {
+    box-shadow: none;
+    max-width: none;
+  }
+  body.printing-sheet .modal-head,
+  body.printing-sheet .modal-foot {
+    display: none;
+  }
+  body.printing-sheet .modal-body {
+    padding: 0;
+  }
   .sidebar,
   .topbar,
   .no-print,

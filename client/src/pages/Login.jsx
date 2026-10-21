@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { LanguageSwitch } from '../components/Layout.jsx';
 
@@ -17,7 +18,9 @@ const DEMO = [
 ];
 
 export default function Login() {
-  const { login, t, roleLabel } = useApp();
+  const { login, t, roleLabel, meta } = useApp();
+  const [forgot, setForgot] = useState(false);
+  const [sent, setSent] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -28,6 +31,11 @@ export default function Login() {
     setBusy(true);
     setError('');
     try {
+      if (forgot) {
+        await api.post('/auth/forgot', { email });
+        setSent(true);
+        return;
+      }
       await login(email, password);
     } catch (err) {
       setError(err.message);
@@ -47,17 +55,47 @@ export default function Login() {
         </div>
         <p className="muted">{t('app.tagline')}</p>
         {error && <div className="alert error">{error}</div>}
-        <label>
-          {t('login.email')}
-          <input type="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
-        </label>
-        <label>
-          {t('login.password')}
-          <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-        </label>
-        <button className="btn primary block" disabled={busy}>
-          {busy ? t('login.signingIn') : t('login.signIn')}
+        {forgot ? (
+          <>
+            <h2 style={{ margin: 0 }}>{t('login.forgotTitle')}</h2>
+            {!meta.resetByEmail ? (
+              <div className="alert info">{t('login.noEmail')}</div>
+            ) : sent ? (
+              <div className="alert info">{t('login.linkSent')}</div>
+            ) : (
+              <p className="muted">{t('login.forgotHint')}</p>
+            )}
+          </>
+        ) : null}
+        {(!forgot || (meta.resetByEmail && !sent)) && (
+          <label>
+            {t('login.email')}
+            <input type="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
+          </label>
+        )}
+        {!forgot && (
+          <label>
+            {t('login.password')}
+            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+          </label>
+        )}
+        {(!forgot || (meta.resetByEmail && !sent)) && (
+          <button className="btn primary block" disabled={busy}>
+            {forgot ? t('login.sendLink') : busy ? t('login.signingIn') : t('login.signIn')}
+          </button>
+        )}
+        <button
+          type="button"
+          className="link"
+          onClick={() => {
+            setForgot(!forgot);
+            setSent(false);
+            setError('');
+          }}
+        >
+          {forgot ? t('login.back') : t('login.forgot')}
         </button>
+        {meta.demo && !forgot && (
         <details className="demo">
           <summary>{t('login.demo')}</summary>
           <div className="demo-grid">
@@ -76,6 +114,7 @@ export default function Login() {
             ))}
           </div>
         </details>
+        )}
       </form>
     </div>
   );

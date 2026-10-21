@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
@@ -291,11 +292,119 @@ function SessionModal({ initial, centers, rounds, assignments, onClose, onSaved 
 const DAYS = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'];
 
 // ---------------------------------------------------------------------------
+// A one-page weekly timetable for a center's contact person. Rendered outside
+// the app root so printing shows only the sheet.
+function CenterSheet({ center, onClose }) {
+  const { t, version } = useApp();
+  const [sessions, setSessions] = useState(null);
+  useEffect(() => {
+    api.get('/centers/assignments', { center_id: center.id }).then(setSessions);
+  }, [center.id, version]);
+
+  const print = () => {
+    document.body.classList.add('printing-sheet');
+    const done = () => {
+      document.body.classList.remove('printing-sheet');
+      window.removeEventListener('afterprint', done);
+    };
+    window.addEventListener('afterprint', done);
+    window.print();
+  };
+
+  return createPortal(
+    <div className="sheet-portal">
+      <Modal
+        title={t('centers.sheetTitle', { name: center.name })}
+        onClose={onClose}
+        wide
+        footer={
+          <>
+            <button className="btn" onClick={onClose}>
+              {t('common.close')}
+            </button>
+            <button className="btn primary" onClick={print}>
+              {t('centers.print')}
+            </button>
+          </>
+        }
+      >
+        <div className="sheet">
+          <div className="sheet-head">
+            <div>
+              <h2>{center.name}</h2>
+              <div className="muted">
+                {[center.address, center.city].filter(Boolean).join(' · ')}
+              </div>
+            </div>
+            <dl className="extra">
+              {center.contact_name && (
+                <div>
+                  <dt>{t('centers.contact')}</dt>
+                  <dd>{center.contact_name}</dd>
+                </div>
+              )}
+              {center.phone && (
+                <div>
+                  <dt>{t('centers.phone')}</dt>
+                  <dd dir="ltr">{center.phone}</dd>
+                </div>
+              )}
+              <div>
+                <dt>{t('centers.capacity')}</dt>
+                <dd>{center.capacity}</dd>
+              </div>
+            </dl>
+          </div>
+          {!sessions ? (
+            <div className="muted">{t('common.loading')}</div>
+          ) : (
+            <table className="table sheet-table">
+              <tbody>
+                {DAYS.map((d) => {
+                  const list = sessions.filter((s) => s.day === d);
+                  return (
+                    <tr key={d}>
+                      <th>{t(`day.${d}`)}</th>
+                      <td>
+                        {list.length === 0 ? (
+                          <span className="muted">{t('centers.noSessionsDay')}</span>
+                        ) : (
+                          list.map((s) => (
+                            <div key={s.id} className="sheet-session">
+                              <strong dir="ltr">
+                                {s.start_time}–{s.end_time}
+                              </strong>
+                              <span>{s.instructor_name}</span>
+                              {s.subject && <span className="muted">{s.subject}</span>}
+                              {(s.starts_on || s.ends_on) && (
+                                <span className="muted sm">
+                                  {formatDate(s.starts_on)} → {formatDate(s.ends_on)}
+                                </span>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          <div className="muted sm sheet-foot">TaskFlow · {t('centers.printedOn', { date: formatDate(new Date().toISOString()) })}</div>
+        </div>
+      </Modal>
+    </div>,
+    document.body,
+  );
+}
+
 function Schedule({ centers, rounds, assignments, reload }) {
   const { t } = useApp();
   const admin = useCenterAdmin();
   const [instructor, setInstructor] = useState('');
   const [editing, setEditing] = useState(null);
+  const [sheet, setSheet] = useState(null);
   const shown = instructor ? assignments.filter((a) => a.instructor_id === Number(instructor)) : assignments;
   const people = [...new Map(assignments.map((a) => [a.instructor_id, a.instructor_name])).entries()];
 
@@ -358,7 +467,9 @@ function Schedule({ centers, rounds, assignments, reload }) {
               {centers.map((c) => (
                 <tr key={c.id}>
                   <th className="sched-center">
-                    <div className="cell-title">{c.name}</div>
+                    <button className="link cell-title" onClick={() => setSheet(c)} title={t('centers.sheet')}>
+                      {c.name}
+                    </button>
                     <div className="muted sm">
                       {c.city} · {t('centers.capacity')}: {c.capacity}
                     </div>
@@ -395,6 +506,7 @@ function Schedule({ centers, rounds, assignments, reload }) {
           </table>
         </div>
       )}
+      {sheet && <CenterSheet center={sheet} onClose={() => setSheet(null)} />}
       {editing && (
         <SessionModal
           initial={editing}
@@ -418,6 +530,7 @@ function CentersTable({ reload }) {
   const [all, setAll] = useState(false);
   const [list, setList] = useState(null);
   const [editing, setEditing] = useState(undefined);
+  const [sheet, setSheet] = useState(null);
 
   useEffect(() => {
     api.get('/centers', { all: all ? '1' : '' }).then((r) => setList(r.centers));
@@ -463,7 +576,11 @@ function CentersTable({ reload }) {
             <tbody>
               {list.map((c) => (
                 <tr key={c.id} className={c.active ? '' : 'inactive'}>
-                  <td className="cell-title">{c.name}</td>
+                  <td className="cell-title">
+                    <button className="link" onClick={() => setSheet(c)} title={t('centers.sheet')}>
+                      {c.name}
+                    </button>
+                  </td>
                   <td>{c.city}</td>
                   <td className="sm">{c.address}</td>
                   <td dir="ltr" className="phone-cell">
@@ -490,6 +607,7 @@ function CentersTable({ reload }) {
           </table>
         </div>
       )}
+      {sheet && <CenterSheet center={sheet} onClose={() => setSheet(null)} />}
       {editing !== undefined && (
         <CenterModal
           center={editing}

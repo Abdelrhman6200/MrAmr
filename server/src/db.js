@@ -202,6 +202,24 @@ function migrate(db) {
   if (!cols.includes('params')) db.exec('ALTER TABLE notifications ADD COLUMN params TEXT');
   const ucols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   if (!ucols.includes('language')) db.exec("ALTER TABLE users ADD COLUMN language TEXT DEFAULT 'en'");
+  // Bumped on password change/reset so older sign-ins stop working.
+  if (!ucols.includes('session_version')) db.exec('ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0');
+  if (!ucols.includes('email_notifications')) db.exec('ALTER TABLE users ADD COLUMN email_notifications INTEGER NOT NULL DEFAULT 1');
+  if (!cols.includes('emailed')) {
+    db.exec('ALTER TABLE notifications ADD COLUMN emailed INTEGER NOT NULL DEFAULT 0');
+    // Don't email notifications that existed before email was introduced.
+    db.exec('UPDATE notifications SET emailed = 1');
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_by INTEGER REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
 }
 
 export function openDb(file) {

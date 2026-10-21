@@ -15,11 +15,13 @@ import callRoutes from './routes/calls.js';
 import centerRoutes from './routes/centers.js';
 import adminRoutes from './routes/admin.js';
 import { securityHeaders } from './security.js';
+import { createMailer } from './mail.js';
 
-export function createApp({ db, secret, staticDir }) {
+export function createApp({ db, secret, staticDir, mailer = createMailer({}), appUrl = null }) {
   const app = express();
   const access = makeAccess(db);
-  const ctx = { db, secret, access };
+  // appUrl (APP_URL) is the public address used in emailed links; never derived from request headers.
+  const ctx = { db, secret, access, mailer, appUrl: appUrl ? appUrl.replace(/\/+$/, '') : null };
 
   // Behind a reverse proxy (nginx, a load balancer) set TRUST_PROXY=1 so login throttling sees real client IPs.
   if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
@@ -29,10 +31,13 @@ export function createApp({ db, secret, staticDir }) {
   // Large enough for a few thousand uploaded call-sheet rows.
   app.use(express.json({ limit: '10mb' }));
 
+  // The login page only offers demo accounts while the demo company is loaded.
+  const isDemo = () => !!db.prepare("SELECT 1 FROM users WHERE email = 'ceo@taskflow.local' AND active = 1").get();
+
   const api = express.Router();
   api.get('/health', (_req, res) => res.json({ ok: true }));
   api.get('/meta', (_req, res) =>
-    res.json({ departments: DEPARTMENTS, roles: ROLES, statuses: STATUSES, priorities: PRIORITIES, taskTypes: TASK_TYPES, projectStatuses: PROJECT_STATUSES, userAdminRoles: USER_ADMIN_ROLES, callStatuses: CALL_STATUSES, centerAdminRoles: CENTER_ADMIN_ROLES, weekdays: WEEKDAYS }),
+    res.json({ departments: DEPARTMENTS, roles: ROLES, statuses: STATUSES, priorities: PRIORITIES, taskTypes: TASK_TYPES, projectStatuses: PROJECT_STATUSES, userAdminRoles: USER_ADMIN_ROLES, callStatuses: CALL_STATUSES, centerAdminRoles: CENTER_ADMIN_ROLES, weekdays: WEEKDAYS, emailEnabled: mailer.enabled, resetByEmail: mailer.enabled && !!ctx.appUrl, demo: isDemo() }),
   );
   api.use('/auth', authRoutes(ctx));
   api.use(requireAuth(db, secret));

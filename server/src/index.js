@@ -3,6 +3,7 @@ import { openDb } from './db.js';
 import { DB_FILE, PORT, STATIC_DIR, loadSecret } from './config.js';
 import { seed } from './seed.js';
 import { hashPassword } from './auth.js';
+import { createMailer, startNotificationEmails } from './mail.js';
 
 const db = openDb(DB_FILE);
 if (db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0) {
@@ -22,5 +23,10 @@ if (db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0) {
   }
 }
 
-const app = createApp({ db, secret: loadSecret(), staticDir: STATIC_DIR });
+const mailer = createMailer();
+const appUrl = process.env.APP_URL || null;
+if (mailer.enabled && !appUrl) console.warn('SMTP is configured but APP_URL is not: emails will have no links and password resets by email are off.');
+startNotificationEmails(db, mailer, appUrl?.replace(/\/+$/, ''));
+
+const app = createApp({ db, secret: loadSecret(), staticDir: STATIC_DIR, mailer, appUrl });
 app.listen(PORT, () => console.log(`TaskFlow API listening on http://localhost:${PORT}`));

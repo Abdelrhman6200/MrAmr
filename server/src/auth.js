@@ -20,8 +20,8 @@ export function verifyPassword(password, stored) {
 const b64 = (s) => Buffer.from(s).toString('base64url');
 const sign = (data, secret) => crypto.createHmac('sha256', secret).update(data).digest('base64url');
 
-export function signToken(userId, secret) {
-  const payload = b64(JSON.stringify({ sub: userId, exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS }));
+export function signToken(user, secret) {
+  const payload = b64(JSON.stringify({ sub: user.id, v: user.session_version ?? 0, exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS }));
   return `${payload}.${sign(payload, secret)}`;
 }
 
@@ -46,7 +46,7 @@ export function requireAuth(db, secret) {
     const token = header.startsWith('Bearer ') ? header.slice(7) : null;
     const data = token && verifyToken(token, secret);
     const user = data && findUser.get(data.sub);
-    if (!user) return next(new HttpError(401, 'Not authenticated'));
+    if (!user || (data.v ?? 0) !== (user.session_version ?? 0)) return next(new HttpError(401, 'Not authenticated'));
     req.user = user;
     next();
   };
@@ -54,6 +54,6 @@ export function requireAuth(db, secret) {
 
 export function publicUser(u) {
   if (!u) return null;
-  const { password_hash, ...rest } = u;
-  return { ...rest, active: !!rest.active };
+  const { password_hash, session_version, ...rest } = u;
+  return { ...rest, active: !!rest.active, email_notifications: rest.email_notifications !== 0 };
 }

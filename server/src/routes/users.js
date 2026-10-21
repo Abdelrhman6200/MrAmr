@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import { transaction } from '../db.js';
+import { createResetToken } from '../passwords.js';
 import { hashPassword, publicUser } from '../auth.js';
 import { badRequest, forbidden, notFound, oneOf, optionalId, requiredString } from '../http.js';
 import { ROLES, departmentOf } from '../meta.js';
@@ -8,6 +9,7 @@ import { ROLES, departmentOf } from '../meta.js';
 const AVATAR_COLORS = ['#6366f1', '#0ea5e9', '#14b8a6', '#22c55e', '#eab308', '#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#64748b'];
 
 export default function userRoutes({ db, access }) {
+  const RESET_LINK_HOURS = 72;
   const r = Router();
   const byId = db.prepare('SELECT * FROM users WHERE id = ?');
 
@@ -108,6 +110,17 @@ export default function userRoutes({ db, access }) {
     });
   });
 
+  // A one-time link an admin can send by WhatsApp/SMS when email isn't set up.
+  // The client builds the URL from its own origin; only the token comes from here.
+  r.post('/:id/reset-link', (req, res) => {
+    if (!access.canAdminUsers(req.user)) throw forbidden();
+    const target = byId.get(Number(req.params.id));
+    if (!target || !target.active) throw notFound('User not found');
+    if (target.role === 'ceo' && req.user.role !== 'ceo') throw forbidden('Only the Head of Company can edit that account');
+    const token = createResetToken(db, target.id, RESET_LINK_HOURS, req.user.id);
+    res.json({ token, hours: RESET_LINK_HOURS });
+  });
+
   r.patch('/:id', (req, res) => {
     const target = byId.get(Number(req.params.id));
     if (!target) throw notFound('User not found');
@@ -120,6 +133,7 @@ export default function userRoutes({ db, access }) {
     if (b.name !== undefined) fields.name = requiredString(b.name, 'name', 120);
     if (b.title !== undefined) fields.title = String(b.title || '').trim();
     if (b.language !== undefined) fields.language = oneOf(b.language, ['en', 'ar'], 'language');
+    if (b.email_notifications !== undefined) fields.email_notifications = b.email_notifications ? 1 : 0;
     if (admin) {
       if (b.email !== undefined) {
         const email = requiredString(b.email, 'email', 200).toLowerCase();
@@ -140,6 +154,7 @@ export default function userRoutes({ db, access }) {
       if (b.password !== undefined) {
         if (typeof b.password !== 'string' || b.password.length < 8) throw badRequest('password must be at least 8 characters');
         fields.password_hash = hashPassword(b.password);
+        fields.session_version = (target.session_version ?? 0) + 1;
       }
     }
     const keys = Object.keys(fields);

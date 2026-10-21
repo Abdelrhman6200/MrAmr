@@ -79,11 +79,15 @@ export function AppProvider({ children }) {
     if (user) api.get('/users').then(setUsers).catch(() => {});
   }, [user, version]);
 
+  const signIn = (token, u) => {
+    setToken(token);
+    adoptUserLang(u);
+    setUser(u);
+  };
+
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password });
-    setToken(res.token);
-    adoptUserLang(res.user);
-    setUser(res.user);
+    signIn(res.token, res.user);
   };
 
   const notify = useCallback((message, kind = 'info') => {
@@ -125,6 +129,7 @@ export function AppProvider({ children }) {
       version,
       refresh,
       login,
+      signIn,
       logout,
       notify,
       toast,

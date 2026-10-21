@@ -1,5 +1,7 @@
+# Debian slim ships time zone data, so the image needs no extra OS packages.
+
 # --- build the web app -------------------------------------------------------
-FROM node:22-alpine AS build
+FROM node:22-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -8,20 +10,21 @@ COPY client ./client
 RUN npm run build
 
 # --- runtime -----------------------------------------------------------------
-FROM node:22-alpine
+FROM node:22-slim
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3001 \
     DATA_DIR=/app/data \
     TZ=Africa/Cairo
-RUN apk add --no-cache tzdata
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY server ./server
+# The server reuses the UI translations for emails.
+COPY client/src/i18n.js ./client/src/i18n.js
 COPY --from=build /app/client/dist ./client/dist
 RUN mkdir -p /app/data && chown -R node:node /app/data
 USER node
 VOLUME ["/app/data"]
 EXPOSE 3001
-HEALTHCHECK --interval=30s --timeout=5s CMD wget -qO- http://127.0.0.1:3001/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3001)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "--no-warnings=ExperimentalWarning", "server/src/index.js"]

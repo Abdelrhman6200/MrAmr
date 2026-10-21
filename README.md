@@ -62,6 +62,7 @@ This is only the demo setup. The real hierarchy is data: the Head of Company or 
 - **Review / QA workflow**: give a task a reviewer (for example Content Quality on an instructor's lesson). The assignee moves it to *In Review*. Only the reviewer, or someone above the reviewer, can **Approve** it (the task becomes Done) or **Request changes** (the task goes back to In Progress with the feedback). Nobody can skip the review and mark the task done directly.
 - **Projects**: grouped by department, with owners, members, progress, overdue counts, a board/list/activity view and a status (planning → active → on hold → completed → archived).
 - **Calls (Customer Service)**: upload an Excel (`.xlsx`) or CSV sheet of students or customers. The app guesses which columns hold the name, phone and email, recognising English and Arabic headings, and keeps every other column. The Head of Customer Service can split the calls evenly between chosen agents (whoever has the fewest open calls gets theirs first), assign selected rows, or reassign single calls. Agents work through their own **My calls** queue: tap to dial, then log *Reached*, *No answer*, *Call back later* (at a set time), *Not interested* or *Wrong number*, with a note. Each list shows progress per agent and per outcome and can be exported back to CSV with the results.
+- **Center sheets**: click any center's name to get a printable one-page weekly timetable with its address and contact person, to hand to the center.
 - **Offline centers**: a table of centers (city, address, phone, contact person, number of rooms) and a weekly schedule grid of centers × days, starting on Saturday.
   - *Collecting availability*: the Head of Company, Operations Manager or Head of Content sends an availability request (for example "Term 2", with a reply-by date). Every instructor is notified and fills in their weekly time slots, the centers they prefer and the most sessions they want per week. Managers see who has submitted and who hasn't, can send reminders, and can enter availability on an instructor's behalf.
   - *Assigning to centers*: click a cell in the schedule to assign an instructor. The instructor list shows who is available at that time and who prefers that center. Double-booking an instructor is always blocked. Assigning outside their availability, over their weekly maximum, or into a center with no free room shows a warning with an "Assign anyway" option. Instructors are notified and see their own sessions under **My availability & sessions**.
@@ -120,6 +121,8 @@ client/src/
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | — | used only on the first start with an empty database. When set, the app creates this one Head of Company account and **no demo data**. When unset, it loads the demo company. |
 | `TZ` | system zone | time zone for "today", overdue and call-backs, e.g. `Africa/Cairo` |
 | `TRUST_PROXY` | — | set to `1` behind nginx/Caddy/a load balancer so login protection sees real client addresses |
+| `APP_URL` | — | the public address, e.g. `https://tasks.yourcompany.com`. Used for links in emails. Email password resets only work when this is set. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `MAIL_FROM` | — | an email account to send from (Google Workspace, Microsoft 365, or any SMTP service). Without `SMTP_HOST` the app works but sends no email. |
 
 ## Deploying
 
@@ -135,6 +138,10 @@ Data lives in the `taskflow-data` volume. Put the app behind HTTPS (for example 
 Without Docker: install Node.js 22.13+, run `npm ci && npm run build`, then start it with the same environment variables (`ADMIN_EMAIL=… ADMIN_PASSWORD=… AUTH_SECRET=… TZ=Africa/Cairo npm start`) under a process manager such as systemd or pm2.
 
 **Backups:** the Head of Company or Operations Manager can click **Download backup** on the Users page at any time. The file is a complete copy of the database. To restore it, stop the app, replace `taskflow.db` in the data directory with the backup file, and start the app again.
+
+**Passwords:** people can click **Forgot password?** on the sign-in page to get a one-hour reset link by email, once `SMTP_*` and `APP_URL` are set. Without email, the Head of Company or Operations Manager opens the person in **Users → Edit → Create password reset link** and sends that link privately (for example on WhatsApp). It works once and lasts 72 hours. Resetting or changing a password signs that person out everywhere else.
+
+**Email notifications:** with email set up, everyone also receives their notifications by email, grouped into at most one email a minute, in their chosen language. Each person can turn this off on their profile page.
 
 **Security:** passwords are hashed with scrypt. Login is locked for 15 minutes after 8 wrong passwords for an account from the same address. The app sends strict browser security headers (no framing, a content security policy, no MIME sniffing).
 
