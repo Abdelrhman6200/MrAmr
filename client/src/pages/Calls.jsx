@@ -438,6 +438,69 @@ function AssignModal({ listId, callIds, agents, onClose, onDone }) {
 }
 
 // ---------------------------------------------------------------------------
+function AgentStats() {
+  const { t, version, callStatusLabel } = useApp();
+  const [days, setDays] = useState(7);
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    api.get('/calls/stats', { days }).then(setData).catch(() => {});
+  }, [days, version]);
+  if (!data) return null;
+  return (
+    <section className="panel">
+      <div className="row between wrap gap">
+        <h2>{t('calls.stats')}</h2>
+        <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+          {[1, 7, 30].map((n) => (
+            <option key={n} value={n}>
+              {n === 1 ? t('calls.statToday') : t('calls.statsDays', { n })}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="table-wrap flat">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{t('calls.agent')}</th>
+              <th>{t('calls.statOpen')}</th>
+              <th>{t('calls.callbacksDue')}</th>
+              <th>{t('calls.statToday')}</th>
+              <th>{t('calls.statLogged')}</th>
+              <th>{t('calls.statContacts')}</th>
+              <th>{callStatusLabel('reached')}</th>
+              <th>{t('calls.statRate')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.agents.map((a) => (
+              <tr key={a.id}>
+                <td>
+                  <span className="row gap-sm">
+                    <Avatar name={a.name} color={a.avatar_color} size={22} /> {a.name}
+                  </span>
+                </td>
+                <td>{a.open}</td>
+                <td className={a.due ? 'text-danger' : ''}>{a.due}</td>
+                <td>{a.today}</td>
+                <td>{a.logged}</td>
+                <td>{a.contacts}</td>
+                <td>{a.reached}</td>
+                <td>
+                  <div className="row gap-sm">
+                    <Progress value={a.reached} total={a.contacts} />
+                    <span className="sm">{a.contacts ? Math.round((a.reached / a.contacts) * 100) : 0}%</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function Lists({ agents, onOpenList }) {
   const { t, version } = useApp();
   const [data, setData] = useState(null);
@@ -449,6 +512,7 @@ function Lists({ agents, onOpenList }) {
 
   return (
     <>
+      {data.can_assign && <AgentStats />}
       <div className="row between wrap gap">
         <div />
         <button className="btn primary" onClick={() => setUploading(true)}>

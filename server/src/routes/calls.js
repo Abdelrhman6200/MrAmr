@@ -84,6 +84,33 @@ export default function callRoutes({ db }) {
   // ---- lists ---------------------------------------------------------------
   r.get('/agents', (_req, res) => res.json(agents()));
 
+  // Per-agent performance across all lists (managers only).
+  r.get('/stats', (req, res) => {
+    if (!isCallManager(req.user)) throw forbidden();
+    const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 365);
+    const since = `-${days} days`;
+    const open = OPEN.map(() => '?').join(',');
+    const rows = agents().map((a) => {
+      const queue = db
+        .prepare(
+          `SELECT COUNT(*) AS open, SUM(CASE WHEN status = 'callback' AND callback_at <= strftime('%Y-%m-%dT%H:%M', 'now', 'localtime') THEN 1 ELSE 0 END) AS due
+           FROM calls WHERE assignee_id = ? AND status IN (${open})`,
+        )
+        .get(a.id, ...OPEN);
+      const logged = db
+        .prepare(
+          `SELECT COUNT(*) AS logged, COUNT(DISTINCT call_id) AS contacts,
+             SUM(CASE WHEN status = 'reached' THEN 1 ELSE 0 END) AS reached,
+             SUM(CASE WHEN status = 'no_answer' THEN 1 ELSE 0 END) AS no_answer,
+             SUM(CASE WHEN created_at >= datetime('now', 'start of day') THEN 1 ELSE 0 END) AS today
+           FROM call_logs WHERE user_id = ? AND created_at >= datetime('now', ?)`,
+        )
+        .get(a.id, since);
+      return { ...a, open: queue.open, due: queue.due || 0, logged: logged.logged, contacts: logged.contacts, reached: logged.reached || 0, no_answer: logged.no_answer || 0, today: logged.today || 0 };
+    });
+    res.json({ days, agents: rows });
+  });
+
   r.get('/lists', (req, res) => {
     const lists = db
       .prepare(

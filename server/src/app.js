@@ -13,11 +13,18 @@ import dashboardRoutes from './routes/dashboard.js';
 import notificationRoutes from './routes/notifications.js';
 import callRoutes from './routes/calls.js';
 import centerRoutes from './routes/centers.js';
+import adminRoutes from './routes/admin.js';
+import { securityHeaders } from './security.js';
 
 export function createApp({ db, secret, staticDir }) {
   const app = express();
   const access = makeAccess(db);
   const ctx = { db, secret, access };
+
+  // Behind a reverse proxy (nginx, a load balancer) set TRUST_PROXY=1 so login throttling sees real client IPs.
+  if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
+  app.disable('x-powered-by');
+  app.use(securityHeaders);
 
   // Large enough for a few thousand uploaded call-sheet rows.
   app.use(express.json({ limit: '10mb' }));
@@ -36,6 +43,7 @@ export function createApp({ db, secret, staticDir }) {
   api.use('/notifications', notificationRoutes(ctx));
   api.use('/calls', callRoutes(ctx));
   api.use('/centers', centerRoutes(ctx));
+  api.use('/admin', adminRoutes(ctx));
   api.use((_req, _res, next) => next(new HttpError(404, 'Unknown API route')));
   app.use('/api', api);
 

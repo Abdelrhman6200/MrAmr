@@ -4,7 +4,7 @@ import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { ActivityText } from '../components/TaskDetail.jsx';
 import { TaskCard } from '../components/TaskViews.jsx';
-import { Avatar, Empty, formatDate, timeAgo } from '../components/ui.jsx';
+import { Avatar, Empty, formatDate, timeAgo, todayISO } from '../components/ui.jsx';
 
 function Stat({ label, value, tone, to }) {
   const body = (
@@ -27,15 +27,18 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [calls, setCalls] = useState(null);
   const [pendingRound, setPendingRound] = useState(null);
+  const [sessions, setSessions] = useState([]);
 
   useEffect(() => {
     api.get('/dashboard').then(setData).catch(() => {});
     if (canUseCalls) api.get('/calls/mine').then(setCalls).catch(() => {});
-    if (user.role === 'instructor')
+    if (user.role === 'instructor') {
       api
         .get('/centers/rounds')
         .then((r) => setPendingRound(r.rounds.find((x) => x.status === 'open' && !x.mine) || null))
         .catch(() => {});
+      api.get('/centers/assignments', { instructor_id: 'me' }).then(setSessions).catch(() => {});
+    }
   }, [version, canUseCalls, user.role]);
 
   if (!data) return <div className="muted">{t('common.loading')}</div>;
@@ -92,6 +95,8 @@ export default function Dashboard() {
             </div>
           </section>
         )}
+
+        {sessions.length > 0 && <CenterWeek sessions={sessions} />}
 
         <section className="panel">
           <h2>{t('dash.upNext')}</h2>
@@ -174,6 +179,40 @@ export default function Dashboard() {
         </section>
       </div>
     </div>
+  );
+}
+
+const JS_DAY = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+// Weekly center sessions that are running this week, today's highlighted.
+function CenterWeek({ sessions }) {
+  const { t } = useApp();
+  const now = new Date();
+  const today = JS_DAY[now.getDay()];
+  const iso = todayISO();
+  const active = sessions.filter((s) => (!s.starts_on || s.starts_on <= iso) && (!s.ends_on || s.ends_on >= iso));
+  if (!active.length) return null;
+  return (
+    <section className="panel">
+      <h2>{t('dash.centerWeek')}</h2>
+      <ul className="week-list">
+        {active.map((s) => (
+          <li key={s.id} className={s.day === today ? 'today' : ''}>
+            <span className="week-day">{s.day === today ? t('tasks.today') : t(`day.${s.day}`)}</span>
+            <span dir="ltr" className="week-time">
+              {s.start_time}–{s.end_time}
+            </span>
+            <span className="grow">
+              <strong>{s.center_name}</strong>
+              {s.subject && <span className="muted"> · {s.subject}</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <Link className="link sm" to="/centers?tab=mine">
+        {t('centers.tabMine')} →
+      </Link>
+    </section>
   );
 }
 

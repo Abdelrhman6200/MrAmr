@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import crypto from 'node:crypto';
+import { transaction } from '../db.js';
 import { hashPassword, publicUser } from '../auth.js';
 import { badRequest, forbidden, notFound, oneOf, optionalId, requiredString } from '../http.js';
 import { ROLES, departmentOf } from '../meta.js';
@@ -55,6 +57,55 @@ export default function userRoutes({ db, access }) {
       .prepare('INSERT INTO users (name, email, password_hash, role, title, manager_id, avatar_color) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(name, email, hashPassword(b.password), role, b.title?.trim() || ROLES[role].label, managerId, color);
     res.status(201).json(withDept(byId.get(Number(info.lastInsertRowid))));
+  });
+
+  // Bulk import from a spreadsheet. Each row: { name, email, role?, manager_email?, title?, password? }.
+  // Rows are processed in order, so a manager can be created earlier in the same sheet.
+  // Passwords not supplied are generated and returned once so they can be handed out.
+  r.post('/import', (req, res) => {
+    if (!access.canAdminUsers(req.user)) throw forbidden('Only the Head of Company or Operations Manager can add users');
+    const b = req.body || {};
+    if (!Array.isArray(b.rows) || !b.rows.length) throw badRequest('The sheet has no rows to import');
+    if (b.rows.length > 1000) throw badRequest('Import at most 1000 people at a time');
+    const defaultRole = b.default_role ? oneOf(b.default_role, Object.keys(ROLES), 'default_role') : null;
+    const defaultManager = validateManager(optionalId(b.default_manager_id, 'default_manager_id') ?? null);
+    const byEmail = db.prepare('SELECT id, active FROM users WHERE email = ?');
+    const insert = db.prepare('INSERT INTO users (name, email, password_hash, role, title, manager_id, avatar_color) VALUES (?, ?, ?, ?, ?, ?, ?)');
+
+    const results = transaction(db, () =>
+      b.rows.map((row, i) => {
+        const email = String(row.email ?? '').trim().toLowerCase();
+        const base = { row: i + 1, name: String(row.name ?? '').trim(), email };
+        try {
+          if (!base.name) throw badRequest('Name is missing');
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw badRequest('Email is missing or invalid');
+          if (byEmail.get(email)) return { ...base, status: 'skipped', message: 'A user with that email already exists' };
+          const role = row.role ? oneOf(row.role, Object.keys(ROLES), 'role') : defaultRole;
+          if (!role) throw badRequest('Role is missing');
+          if (role === 'ceo' && req.user.role !== 'ceo') throw forbidden('Only the Head of Company can create another Head of Company');
+          let managerId = defaultManager;
+          if (row.manager_email) {
+            const m = byEmail.get(String(row.manager_email).trim().toLowerCase());
+            if (!m || !m.active) throw badRequest('Manager email not found');
+            managerId = m.id;
+          }
+          const supplied = typeof row.password === 'string' && row.password.length >= 8;
+          const password = supplied ? row.password : crypto.randomBytes(9).toString('base64url').slice(0, 12);
+          const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
+          insert.run(base.name.slice(0, 120), email, hashPassword(password), role, String(row.title ?? '').trim().slice(0, 120) || null, managerId, color);
+          return { ...base, status: 'created', role, password: supplied ? undefined : password };
+        } catch (err) {
+          if (!err.status) throw err;
+          return { ...base, status: 'error', message: err.message };
+        }
+      }),
+    );
+    res.json({
+      created: results.filter((x) => x.status === 'created').length,
+      skipped: results.filter((x) => x.status === 'skipped').length,
+      errors: results.filter((x) => x.status === 'error').length,
+      results,
+    });
   });
 
   r.patch('/:id', (req, res) => {

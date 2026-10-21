@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { Avatar, Empty, Modal, formatDate, timeAgo } from '../components/ui.jsx';
+import { download, toCsv } from '../sheet.js';
 
 const WARNINGS = ['center_full', 'no_availability', 'outside_availability', 'max_sessions'];
 const overlaps = (a, b) => a.start_time < b.end_time && b.start_time < a.end_time;
@@ -298,6 +299,20 @@ function Schedule({ centers, rounds, assignments, reload }) {
   const shown = instructor ? assignments.filter((a) => a.instructor_id === Number(instructor)) : assignments;
   const people = [...new Map(assignments.map((a) => [a.instructor_id, a.instructor_name])).entries()];
 
+  const exportCsv = () => {
+    const order = (a) => DAYS.indexOf(a.day) * 10000 + Number(a.start_time.replace(':', ''));
+    const rows = [...shown]
+      .sort((a, b) => a.center_name.localeCompare(b.center_name) || order(a) - order(b))
+      .map((a) => [a.center_name, a.center_city, t(`day.${a.day}`), a.start_time, a.end_time, a.instructor_name, a.subject, a.starts_on || '', a.ends_on || '', a.notes || '']);
+    download(
+      'center-schedule.csv',
+      toCsv(
+        [t('session.center'), t('centers.city'), t('session.day'), t('session.start'), t('session.end'), t('session.instructor'), t('session.subject'), t('session.from'), t('session.until'), t('centers.notes')],
+        rows,
+      ),
+    );
+  };
+
   return (
     <>
       <div className="row between wrap gap">
@@ -310,13 +325,21 @@ function Schedule({ centers, rounds, assignments, reload }) {
               </option>
             ))}
           </select>
-          {admin && <span className="muted sm">{t('centers.scheduleHint')}</span>}
+          {admin && <span className="muted sm no-print">{t('centers.scheduleHint')}</span>}
         </div>
-        {admin && centers.length > 0 && (
-          <button className="btn primary" onClick={() => setEditing({})}>
-            {t('centers.assign')}
+        <div className="row gap wrap no-print">
+          <button className="btn" onClick={exportCsv} disabled={!shown.length}>
+            {t('centers.export')}
           </button>
-        )}
+          <button className="btn" onClick={() => window.print()}>
+            {t('centers.print')}
+          </button>
+          {admin && centers.length > 0 && (
+            <button className="btn primary" onClick={() => setEditing({})}>
+              {t('centers.assign')}
+            </button>
+          )}
+        </div>
       </div>
       {centers.length === 0 ? (
         <Empty icon="⌂">{t('centers.none')}</Empty>

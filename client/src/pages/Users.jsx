@@ -3,6 +3,268 @@ import { Navigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { Avatar, DeptTag, Modal, UserSelect } from '../components/ui.jsx';
+import { DICTS } from '../i18n.js';
+import { download, readSpreadsheet, toCsv } from '../sheet.js';
+
+const COLUMN_GUESSES = {
+  name: [/^name$/i, /full.?name/i, /الاسم/, /اسم/, /name/i],
+  email: [/e-?mail/i, /بريد/, /ايميل|إيميل/],
+  role: [/role/i, /position/i, /الدور/, /الوظيفة/],
+  manager: [/manager/i, /reports.?to/i, /المدير/],
+  title: [/title/i, /job/i, /المسمى/],
+  password: [/password/i, /كلمة/],
+};
+
+function guess(columns) {
+  const taken = new Set();
+  const out = {};
+  for (const [field, patterns] of Object.entries(COLUMN_GUESSES)) {
+    out[field] = '';
+    for (const re of patterns) {
+      const c = columns.find((col) => re.test(col) && !taken.has(col));
+      if (c) {
+        out[field] = c;
+        taken.add(c);
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+// Accepts a role key, or its English or Arabic label, in any letter case.
+function roleResolver(meta) {
+  const index = new Map();
+  for (const [key, r] of Object.entries(meta.roles)) {
+    for (const v of [key, r.label, DICTS.ar[`role.${key}`]]) if (v) index.set(v.trim().toLowerCase(), key);
+  }
+  return (value) => (value ? index.get(String(value).trim().toLowerCase()) ?? null : undefined);
+}
+
+function ImportModal({ people, onClose, onDone }) {
+  const { meta, t, roleLabel, user: me, notify } = useApp();
+  const [sheet, setSheet] = useState(null);
+  const [map, setMap] = useState({});
+  const [defaultRole, setDefaultRole] = useState('instructor');
+  const [defaultManager, setDefaultManager] = useState(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const resolveRole = roleResolver(meta);
+
+  const onFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError('');
+    try {
+      const parsed = await readSpreadsheet(file);
+      if (!parsed.rows.length) throw new Error(t('upload.empty'));
+      setSheet(parsed);
+      setMap(guess(parsed.columns));
+    } catch (err) {
+      setError(err.message && !/zip|xml|invalid|corrupt/i.test(err.message) ? err.message : t('upload.badFile'));
+    }
+  };
+
+  const rows = (sheet?.rows || []).map((r) => {
+    const rawRole = map.role ? r[map.role] : '';
+    return {
+      name: map.name ? r[map.name] : '',
+      email: map.email ? r[map.email] : '',
+      role: resolveRole(rawRole),
+      rawRole,
+      manager_email: map.manager ? r[map.manager] : '',
+      title: map.title ? r[map.title] : '',
+      password: map.password ? r[map.password] : '',
+    };
+  });
+  const unknownRoles = [...new Set(rows.filter((r) => r.role === null).map((r) => r.rawRole))];
+
+  const submit = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await api.post('/users/import', {
+        default_role: defaultRole || undefined,
+        default_manager_id: defaultManager,
+        rows: rows.map(({ rawRole, ...r }) => ({ ...r, role: r.role || undefined, password: r.password || undefined })),
+      });
+      setResult(res);
+      notify(t('import.done', res), res.errors ? 'error' : 'success');
+      onDone();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const generated = result?.results.filter((r) => r.password) || [];
+  const downloadCreds = () =>
+    download(
+      'taskflow-sign-in-details.csv',
+      toCsv(
+        [t('import.name'), t('import.email'), t('import.passwordCol')],
+        generated.map((r) => [r.name, r.email, r.password]),
+      ),
+    );
+
+  const columnSelect = (field) => (
+    <select value={map[field] || ''} onChange={(e) => setMap({ ...map, [field]: e.target.value })}>
+      <option value="">{t('upload.notUsed')}</option>
+      {sheet.columns.map((c) => (
+        <option key={c} value={c}>
+          {c}
+        </option>
+      ))}
+    </select>
+  );
+
+  return (
+    <Modal
+      title={t('import.heading')}
+      onClose={onClose}
+      wide
+      footer={
+        result ? (
+          <>
+            {generated.length > 0 && (
+              <button className="btn" onClick={downloadCreds}>
+                {t('import.downloadCreds')}
+              </button>
+            )}
+            <button className="btn primary" onClick={onClose}>
+              {t('import.finish')}
+            </button>
+          </>
+        ) : (
+          <>
+            <button className="btn" onClick={onClose}>
+              {t('common.cancel')}
+            </button>
+            <button className="btn primary" disabled={!sheet || busy || !map.name || !map.email || unknownRoles.length > 0} onClick={submit}>
+              {busy ? t('import.importing') : t('import.submit', { n: rows.length })}
+            </button>
+          </>
+        )
+      }
+    >
+      <div className="form">
+        {error && <div className="alert error">{error}</div>}
+        {result ? (
+          <>
+            <div className={`alert ${result.errors ? 'warning' : 'info'}`}>{t('import.done', result)}</div>
+            {generated.length > 0 && <div className="alert warning">{t('import.credsWarning')}</div>}
+            <div className="table-wrap preview tall">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>{t('import.name')}</th>
+                    <th>{t('import.email')}</th>
+                    <th>{t('users.status')}</th>
+                    <th>{t('import.passwordCol')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.results.map((r) => (
+                    <tr key={r.row}>
+                      <td>{r.row}</td>
+                      <td>{r.name}</td>
+                      <td dir="ltr" className="phone-cell">
+                        {r.email}
+                      </td>
+                      <td>
+                        <span className={`pill ${r.status === 'created' ? 'status-done' : r.status === 'skipped' ? 'status-todo' : 'status-blocked'}`}>{t(`import.status.${r.status}`)}</span>
+                        {r.message && <div className="muted sm">{r.message}</div>}
+                      </td>
+                      <td dir="ltr" className="phone-cell">
+                        <code>{r.password}</code>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <>
+            <label>
+              {t('upload.file')}
+              <input type="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={onFile} />
+              <span className="hint">{t('import.fileHint')}</span>
+            </label>
+            {sheet && (
+              <>
+                <div className="alert info">{t('import.rows', { n: rows.length })}</div>
+                <div>
+                  <div className="field-label">{t('import.mapping')}</div>
+                  <div className="grid-3">
+                    {['name', 'email', 'role', 'manager', 'title', 'password'].map((f) => (
+                      <label key={f}>
+                        {t(`import.${f}`)}
+                        {columnSelect(f)}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <label>
+                    {t('import.defaultRole')}
+                    <select value={defaultRole} onChange={(e) => setDefaultRole(e.target.value)}>
+                      {Object.keys(meta.roles)
+                        .filter((k) => k !== 'ceo' || me.role === 'ceo')
+                        .map((k) => (
+                          <option key={k} value={k}>
+                            {roleLabel(k)}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label>
+                    {t('import.defaultManager')}
+                    <UserSelect users={people.filter((p) => p.active)} value={defaultManager} onChange={setDefaultManager} placeholder={t('users.noManager')} />
+                  </label>
+                </div>
+                {unknownRoles.length > 0 && (
+                  <div className="alert error">{unknownRoles.map((v) => t('import.unknownRole', { value: v })).join(' · ')}</div>
+                )}
+                <div className="table-wrap preview">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>{t('import.name')}</th>
+                        <th>{t('import.email')}</th>
+                        <th>{t('import.role')}</th>
+                        <th>{t('import.manager')}</th>
+                        <th>{t('import.title')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.slice(0, 8).map((r, i) => (
+                        <tr key={i}>
+                          <td>{r.name}</td>
+                          <td dir="ltr" className="phone-cell">
+                            {r.email}
+                          </td>
+                          <td className={r.role === null ? 'text-danger' : ''}>{r.role ? roleLabel(r.role) : r.role === null ? r.rawRole : <span className="muted">{roleLabel(defaultRole)}</span>}</td>
+                          <td dir="ltr" className="phone-cell">
+                            {r.manager_email}
+                          </td>
+                          <td>{r.title}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
 
 function UserForm({ editing, people, onClose, onSaved }) {
   const { meta, user: me, t, roleLabel, deptLabel } = useApp();
@@ -94,6 +356,7 @@ export default function Users() {
   const { isUserAdmin, refresh, version, roleLabel, deptOf, userById, notify, user: me, t } = useApp();
   const [people, setPeople] = useState([]);
   const [editing, setEditing] = useState(undefined);
+  const [importing, setImporting] = useState(false);
   const [q, setQ] = useState('');
 
   useEffect(() => {
@@ -107,9 +370,25 @@ export default function Users() {
     <div className="page">
       <div className="page-head">
         <h1>{t('users.title')}</h1>
-        <button className="btn primary" onClick={() => setEditing(null)}>
-          {t('users.add')}
-        </button>
+        <div className="row gap wrap">
+          <button
+            className="btn"
+            onClick={() =>
+              api
+                .download('/admin/backup', 'taskflow-backup.db')
+                .then(() => notify(t('users.backupDone'), 'success'))
+                .catch((e) => notify(e.message, 'error'))
+            }
+          >
+            {t('users.backup')}
+          </button>
+          <button className="btn" onClick={() => setImporting(true)}>
+            {t('users.import')}
+          </button>
+          <button className="btn primary" onClick={() => setEditing(null)}>
+            {t('users.add')}
+          </button>
+        </div>
       </div>
       <div className="filters">
         <input className="search" placeholder={t('users.search')} value={q} onChange={(e) => setQ(e.target.value)} />
@@ -156,6 +435,7 @@ export default function Users() {
           </tbody>
         </table>
       </div>
+      {importing && <ImportModal people={people} onClose={() => setImporting(false)} onDone={refresh} />}
       {editing !== undefined && (
         <UserForm
           editing={editing}

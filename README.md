@@ -65,6 +65,7 @@ This is only the demo setup. The real hierarchy is data: the Head of Company or 
 - **Offline centers**: a table of centers (city, address, phone, contact person, number of rooms) and a weekly schedule grid of centers × days, starting on Saturday.
   - *Collecting availability*: the Head of Company, Operations Manager or Head of Content sends an availability request (for example "Term 2", with a reply-by date). Every instructor is notified and fills in their weekly time slots, the centers they prefer and the most sessions they want per week. Managers see who has submitted and who hasn't, can send reminders, and can enter availability on an instructor's behalf.
   - *Assigning to centers*: click a cell in the schedule to assign an instructor. The instructor list shows who is available at that time and who prefers that center. Double-booking an instructor is always blocked. Assigning outside their availability, over their weekly maximum, or into a center with no free room shows a warning with an "Assign anyway" option. Instructors are notified and see their own sessions under **My availability & sessions**.
+- **Bulk user import**: on the Users page, upload an Excel or CSV sheet of people (name and email, plus optional role, manager email, job title and password). Roles can be written in English or Arabic. People without a password get a generated one, shown once and downloadable as a sign-in sheet to hand out.
 - **English and Arabic**: switch language from the top bar, the login screen or your profile. Arabic flips the whole layout right-to-left. The choice is saved to your account.
 - **Calendar**: a month view of due dates for you, your team or everything you can see. Double-click a day to create a task due that day.
 - **Team**: a collapsible org chart and a by-department directory.
@@ -116,6 +117,26 @@ client/src/
 | `DATA_DIR` | `./data` | where the SQLite database lives |
 | `DB_FILE` | `$DATA_DIR/taskflow.db` | database file |
 | `AUTH_SECRET` | generated into `$DATA_DIR/.secret` | signs login tokens. **Set this in production.** |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | — | used only on the first start with an empty database. When set, the app creates this one Head of Company account and **no demo data**. When unset, it loads the demo company. |
+| `TZ` | system zone | time zone for "today", overdue and call-backs, e.g. `Africa/Cairo` |
+| `TRUST_PROXY` | — | set to `1` behind nginx/Caddy/a load balancer so login protection sees real client addresses |
+
+## Deploying
+
+With Docker on any Linux server:
+
+```bash
+cp .env.example .env      # fill in ADMIN_EMAIL, ADMIN_PASSWORD and AUTH_SECRET (openssl rand -hex 32)
+docker compose up -d      # http://your-server:3001
+```
+
+Data lives in the `taskflow-data` volume. Put the app behind HTTPS (for example with Caddy or nginx) before people sign in over the internet, and set `TRUST_PROXY=1` when you do.
+
+Without Docker: install Node.js 22.13+, run `npm ci && npm run build`, then start it with the same environment variables (`ADMIN_EMAIL=… ADMIN_PASSWORD=… AUTH_SECRET=… TZ=Africa/Cairo npm start`) under a process manager such as systemd or pm2.
+
+**Backups:** the Head of Company or Operations Manager can click **Download backup** on the Users page at any time. The file is a complete copy of the database. To restore it, stop the app, replace `taskflow.db` in the data directory with the backup file, and start the app again.
+
+**Security:** passwords are hashed with scrypt. Login is locked for 15 minutes after 8 wrong passwords for an account from the same address. The app sends strict browser security headers (no framing, a content security policy, no MIME sniffing).
 
 ## Tests
 

@@ -4,9 +4,10 @@ import { useApp } from '../context.jsx';
 import { todayISO, useTaskDialog } from '../components/ui.jsx';
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-// 2024-01-01 was a Monday.
-const weekdayName = (i, locale) => new Date(2024, 0, 1 + i).toLocaleDateString(locale, { weekday: 'short' });
+// The week starts on Saturday, matching the centers schedule.
+const WEEKDAYS = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+// 2024-01-06 was a Saturday.
+const weekdayName = (i, locale) => new Date(2024, 0, 6 + i).toLocaleDateString(locale, { weekday: 'short' });
 
 export default function CalendarPage() {
   const { version, t, locale } = useApp();
@@ -18,9 +19,9 @@ export default function CalendarPage() {
   const [scope, setScope] = useState('mine');
   const [tasks, setTasks] = useState([]);
 
-  // Grid starts on the Monday on/before the 1st and spans 6 weeks.
+  // Grid starts on the Saturday on/before the 1st and spans 6 weeks.
   const start = new Date(cursor);
-  start.setDate(1 - ((cursor.getDay() + 6) % 7));
+  start.setDate(1 - ((cursor.getDay() + 1) % 7));
   const days = Array.from({ length: 42 }, (_, i) => {
     const d = new Date(start);
     d.setDate(start.getDate() + i);

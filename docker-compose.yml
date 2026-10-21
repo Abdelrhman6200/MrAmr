@@ -1,0 +1,21 @@
+services:
+  taskflow:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - taskflow-data:/app/data
+    environment:
+      # Used only on the very first start, to create the Head of Company account.
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?set ADMIN_EMAIL in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrator}
+      # Signs login sessions. Generate one with: openssl rand -hex 32
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+      TZ: ${TZ:-Africa/Cairo}
+      # Set to 1 when running behind a reverse proxy such as nginx or Caddy.
+      TRUST_PROXY: ${TRUST_PROXY:-}
+
+volumes:
+  taskflow-data:

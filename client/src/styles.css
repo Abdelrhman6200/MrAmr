@@ -1613,6 +1613,9 @@ a.stat:hover {
 .preview {
   max-height: 220px;
 }
+.preview.tall {
+  max-height: 50vh;
+}
 .preview th.mapped {
   color: var(--accent);
   background: var(--accent-soft);
@@ -1799,6 +1802,72 @@ a.stat:hover {
 .round-chips .status-chip.active {
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+.week-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.week-list li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+.week-list li.today {
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.week-day {
+  min-width: 70px;
+  color: var(--muted);
+}
+.week-list li.today .week-day {
+  color: var(--accent-strong);
+}
+.week-time {
+  font-variant-numeric: tabular-nums;
+}
+
+@media print {
+  .sidebar,
+  .topbar,
+  .no-print,
+  .page-head .seg,
+  .filters select,
+  .toast {
+    display: none !important;
+  }
+  body,
+  .main,
+  .content {
+    background: #fff;
+    padding: 0;
+  }
+  .table-wrap {
+    overflow: visible;
+    border: 0;
+  }
+  .table.schedule {
+    min-width: 0;
+    font-size: 11px;
+  }
+  .sched-add {
+    display: none !important;
+  }
+  .sched-cell.editable:hover {
+    background: none;
+  }
+  .session {
+    break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 
 /* Responsive */

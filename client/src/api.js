@@ -51,7 +51,27 @@ const qs = (params = {}) => {
   return p.length ? `?${new URLSearchParams(p)}` : '';
 };
 
+// Downloads an authenticated file response (e.g. a backup) to the user's device.
+async function download(path, fallbackName) {
+  const token = getToken();
+  const res = await fetch(`/api${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, translateMessage(data.error || res.statusText), data.code, data.details);
+  }
+  const name = /filename="?([^";]+)"?/.exec(res.headers.get('content-disposition') || '')?.[1] || fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export const api = {
+  download,
   get: (path, params) => request('GET', path + qs(params), undefined),
   post: (path, body) => request('POST', path, body || {}),
   patch: (path, body) => request('PATCH', path, body),

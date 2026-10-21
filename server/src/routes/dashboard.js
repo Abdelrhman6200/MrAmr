@@ -71,7 +71,8 @@ export default function dashboardRoutes({ db, access }) {
          FROM tasks t LEFT JOIN users a ON a.id = t.assignee_id WHERE ${scope.sql}`,
       )
       .all(...scope.params);
-    const today = new Date().toISOString().slice(0, 10);
+    // Same clock as the SQL overdue checks (date('now','localtime')).
+    const today = db.prepare("SELECT date('now', 'localtime') AS d").get().d;
 
     const byDept = {};
     for (const key of Object.keys(DEPARTMENTS)) byDept[key] = { department: key, total: 0, done: 0, open: 0, overdue: 0, blocked: 0 };
