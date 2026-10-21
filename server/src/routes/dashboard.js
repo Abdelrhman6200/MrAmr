@@ -137,5 +137,5 @@ export default function dashboardRoutes({ db, access }) {
   return r;
 }
 
-// SQLite datetime('now') is "YYYY-MM-DD HH:MM:SS" (UTC); compare as ISO.
+// Stored timestamps are UTC 'YYYY-MM-DD HH:MM:SS' (see time.js); convert to ISO to compare with JS dates.
 const isoOf = (s) => (s.includes('T') ? s : `${s.replace(' ', 'T')}Z`);

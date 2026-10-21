@@ -260,7 +260,7 @@ export default function TaskDetail({ id }) {
             <UserSelect users={assigneeOptions} value={task.assignee_id} disabled={ro} onChange={(v) => update({ assignee_id: v })} />
           </Field>
           <Field label={t('form.reviewer')}>
-            <UserSelect users={users} value={task.reviewer_id} disabled={ro} placeholder={t('form.noReview')} onChange={(v) => update({ reviewer_id: v })} />
+            <UserSelect users={users} value={task.reviewer_id} disabled={ro || !task.can_change_reviewer} placeholder={t('form.noReview')} onChange={(v) => update({ reviewer_id: v })} />
           </Field>
           <Field label={t('form.priority')}>
             <select value={task.priority} disabled={ro} onChange={(e) => update({ priority: e.target.value })}>

@@ -10,6 +10,7 @@ import { Router } from 'express';
 import { transaction } from '../db.js';
 import { badRequest, forbidden, notFound, oneOf, optionalId, requiredString } from '../http.js';
 import { CALL_STATUSES, departmentOf, isManagerRole, keys } from '../meta.js';
+import { SQL_LOCAL_NOW_MINUTE, SQL_LOCAL_TODAY_START } from '../time.js';
 
 const MAX_ROWS = 5000;
 const OPEN = CALL_STATUSES.filter((s) => s.open).map((s) => s.key);
@@ -93,7 +94,7 @@ export default function callRoutes({ db }) {
     const rows = agents().map((a) => {
       const queue = db
         .prepare(
-          `SELECT COUNT(*) AS open, SUM(CASE WHEN status = 'callback' AND callback_at <= strftime('%Y-%m-%dT%H:%M', 'now', 'localtime') THEN 1 ELSE 0 END) AS due
+          `SELECT COUNT(*) AS open, SUM(CASE WHEN status = 'callback' AND callback_at <= ${SQL_LOCAL_NOW_MINUTE} THEN 1 ELSE 0 END) AS due
            FROM calls WHERE assignee_id = ? AND status IN (${open})`,
         )
         .get(a.id, ...OPEN);
@@ -102,7 +103,7 @@ export default function callRoutes({ db }) {
           `SELECT COUNT(*) AS logged, COUNT(DISTINCT call_id) AS contacts,
              SUM(CASE WHEN status = 'reached' THEN 1 ELSE 0 END) AS reached,
              SUM(CASE WHEN status = 'no_answer' THEN 1 ELSE 0 END) AS no_answer,
-             SUM(CASE WHEN created_at >= datetime('now', 'start of day') THEN 1 ELSE 0 END) AS today
+             SUM(CASE WHEN created_at >= ${SQL_LOCAL_TODAY_START} THEN 1 ELSE 0 END) AS today
            FROM call_logs WHERE user_id = ? AND created_at >= datetime('now', ?)`,
         )
         .get(a.id, since);
@@ -254,7 +255,7 @@ export default function callRoutes({ db }) {
     const calls = db
       .prepare(
         `${CALL_SELECT} WHERE c.assignee_id = ? AND c.status IN (${status.map(() => '?').join(',')})
-         ORDER BY CASE WHEN c.status = 'callback' AND c.callback_at <= datetime('now','localtime') THEN 0 WHEN c.status = 'pending' THEN 1 ELSE 2 END,
+         ORDER BY CASE WHEN c.status = 'callback' AND c.callback_at <= ${SQL_LOCAL_NOW_MINUTE} THEN 0 WHEN c.status = 'pending' THEN 1 ELSE 2 END,
                   c.callback_at IS NULL, c.callback_at, c.id LIMIT 500`,
       )
       .all(req.user.id, ...status);
@@ -262,7 +263,7 @@ export default function callRoutes({ db }) {
       db.prepare('SELECT status, COUNT(*) AS n FROM calls WHERE assignee_id = ? GROUP BY status').all(req.user.id).map((s) => [s.status, s.n]),
     );
     const today = db
-      .prepare("SELECT COUNT(*) AS n FROM call_logs WHERE user_id = ? AND created_at >= datetime('now','start of day')")
+      .prepare(`SELECT COUNT(*) AS n FROM call_logs WHERE user_id = ? AND created_at >= ${SQL_LOCAL_TODAY_START}`)
       .get(req.user.id).n;
     res.json({ calls: calls.map(parseCall), counts, loggedToday: today });
   });
@@ -298,14 +299,18 @@ export default function callRoutes({ db }) {
     if (b.status !== undefined || b.note !== undefined) {
       const owner = (b.assignee_id !== undefined ? optionalId(b.assignee_id, 'assignee_id') : c.assignee_id) === req.user.id;
       if (!owner && !manager) throw forbidden('Only the assigned agent can log this call');
-      const status = b.status !== undefined ? oneOf(b.status, keys(CALL_STATUSES), 'status') : c.status;
+      // A request with only a note annotates the call; it isn't a new attempt and
+      // keeps the current outcome and call-back time.
+      const loggingOutcome = b.status !== undefined;
+      const status = loggingOutcome ? oneOf(b.status, keys(CALL_STATUSES), 'status') : c.status;
       const note = cell(b.note, 2000);
-      let callbackAt = null;
-      if (status === 'callback') {
+      if (!loggingOutcome && !note) throw badRequest('Write a note');
+      let callbackAt = loggingOutcome ? null : c.callback_at;
+      if (loggingOutcome && status === 'callback') {
         if (!b.callback_at || !DATETIME_RE.test(b.callback_at)) throw badRequest('Choose when to call back');
         callbackAt = b.callback_at.replace(' ', 'T').slice(0, 16);
       }
-      const isAttempt = status !== 'pending';
+      const isAttempt = loggingOutcome && status !== 'pending';
       transaction(db, () => {
         db.prepare(
           `UPDATE calls SET status = ?, callback_at = ?, notes = CASE WHEN ? != '' THEN ? ELSE notes END,

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useApp } from '../context.jsx';
 import { getActiveLocale } from '../i18n.js';
+import { parseServerTime } from '../time.js';
 
 export const initials = (name = '') =>
   name
@@ -58,15 +59,15 @@ export function isOverdue(task) {
   return task.status !== 'done' && task.due_date && task.due_date < todayISO();
 }
 
-export function formatDate(iso) {
-  if (!iso) return '';
-  const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
+export function formatDate(value) {
+  const d = parseServerTime(value);
+  if (!d || Number.isNaN(d.getTime())) return '';
   return d.toLocaleDateString(getActiveLocale(), { month: 'short', day: 'numeric', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
 }
 
 export function formatDateTime(value) {
-  if (!value) return '';
-  const d = new Date(value.includes('T') || value.includes(' ') ? value.replace(' ', 'T') : `${value}T00:00`);
+  const d = parseServerTime(value);
+  if (!d || Number.isNaN(d.getTime())) return '';
   return d.toLocaleString(getActiveLocale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
@@ -79,8 +80,8 @@ export function DueDate({ task }) {
 }
 
 export function timeAgo(ts) {
-  if (!ts) return '';
-  const date = new Date(ts.includes('T') ? ts : `${ts.replace(' ', 'T')}Z`);
+  const date = parseServerTime(ts);
+  if (!date) return '';
   const s = Math.round((Date.now() - date) / 1000);
   const rtf = new Intl.RelativeTimeFormat(getActiveLocale(), { numeric: 'auto', style: 'short' });
   if (s < 60) return rtf.format(0, 'second');

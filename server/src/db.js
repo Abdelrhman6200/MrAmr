@@ -210,6 +210,9 @@ function migrate(db) {
     // Don't email notifications that existed before email was introduced.
     db.exec('UPDATE notifications SET emailed = 1');
   }
+  // Normalise timestamps written in ISO form by older versions to 'YYYY-MM-DD HH:MM:SS' UTC.
+  db.exec("UPDATE tasks SET completed_at = datetime(completed_at) WHERE completed_at LIKE '%T%'");
+  db.exec("UPDATE calls SET last_called_at = datetime(last_called_at) WHERE last_called_at LIKE '%T%'");
   db.exec(`
     CREATE TABLE IF NOT EXISTS password_resets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -233,14 +236,22 @@ export function openDb(file) {
   return db;
 }
 
+// Runs fn atomically. Safe to nest: inner calls become savepoints, so a helper
+// that uses a transaction can be called from inside another one.
+const depth = new WeakMap();
 export function transaction(db, fn) {
-  db.exec('BEGIN');
+  const level = depth.get(db) ?? 0;
+  const name = `sp${level}`;
+  db.exec(level === 0 ? 'BEGIN' : `SAVEPOINT ${name}`);
+  depth.set(db, level + 1);
   try {
     const result = fn();
-    db.exec('COMMIT');
+    db.exec(level === 0 ? 'COMMIT' : `RELEASE ${name}`);
     return result;
   } catch (err) {
-    db.exec('ROLLBACK');
+    db.exec(level === 0 ? 'ROLLBACK' : `ROLLBACK TO ${name}; RELEASE ${name}`);
     throw err;
+  } finally {
+    depth.set(db, level);
   }
 }

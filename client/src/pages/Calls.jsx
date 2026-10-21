@@ -3,6 +3,7 @@ import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { download, guessColumns, readSpreadsheet, toCsv } from '../sheet.js';
+import { parseServerTime } from '../time.js';
 import { Avatar, CallStatusPill, Empty, Modal, Progress, formatDate, formatDateTime, timeAgo } from '../components/ui.jsx';
 
 const OUTCOMES = ['reached', 'no_answer', 'callback', 'not_interested', 'wrong_number'];
@@ -34,7 +35,7 @@ function defaultCallback() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-const isDue = (c) => c.status === 'callback' && c.callback_at && new Date(c.callback_at) <= new Date();
+const isDue = (c) => c.status === 'callback' && c.callback_at && parseServerTime(c.callback_at) <= new Date();
 
 // ---------------------------------------------------------------------------
 function LogForm({ call, onLogged }) {

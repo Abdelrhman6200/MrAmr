@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { hashPassword } from './auth.js';
 import { openDb, transaction } from './db.js';
+import { nowUtc } from './time.js';
 
 export const DEMO_PASSWORD = 'password123';
 
@@ -26,11 +27,13 @@ const PEOPLE = [
   ['po', 'Ahmed Zaki', 'product@taskflow.local', 'product_owner', 'ceo', '#22c55e'],
 ];
 
+// A calendar date `offset` days from today, in local time.
 const day = (offset) => {
   const d = new Date();
   d.setDate(d.getDate() + offset);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
+const daysAgoUtc = (n) => new Date(Date.now() - n * 864e5).toISOString().replace('T', ' ').slice(0, 19);
 
 export function seed(db) {
   transaction(db, () => {
@@ -77,7 +80,7 @@ export function seed(db) {
           due == null ? null : day(due),
           opts.est ?? null,
           opts.tags || '',
-          status === 'done' ? new Date(Date.now() - (opts.doneAgo ?? 2) * 864e5).toISOString() : null,
+          status === 'done' ? daysAgoUtc(opts.doneAgo ?? 2) : null,
         ).lastInsertRowid,
       );
       insActivity.run(id, p, ids[reporter], 'created', title);
@@ -172,7 +175,7 @@ export function seed(db) {
       const called = status !== 'pending';
       const cid = Number(
         insCall
-          .run(callList, name, phone, email, JSON.stringify({ Name: name, Phone: phone, Email: email, Course: course, Amount: amount }), who ? ids[who] : null, status, note, called ? 1 : 0, called ? new Date().toISOString() : null, status === 'callback' ? tomorrow : null)
+          .run(callList, name, phone, email, JSON.stringify({ Name: name, Phone: phone, Email: email, Course: course, Amount: amount }), who ? ids[who] : null, status, note, called ? 1 : 0, called ? nowUtc() : null, status === 'callback' ? tomorrow : null)
           .lastInsertRowid,
       );
       if (called) insLog.run(cid, ids[who], status, note);

@@ -15,15 +15,32 @@ export function makeAccess(db) {
   const memberOf = db.prepare('SELECT project_id FROM project_members WHERE user_id = ?');
   const projectById = db.prepare('SELECT id, owner_id FROM projects WHERE id = ?');
   const isMember = db.prepare('SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?');
+  const ownedBy = db.prepare('SELECT id FROM projects WHERE owner_id IN (SELECT value FROM json_each(?))');
 
-  function reportsOf(userId) {
-    const rows = allUsers.all();
-    const children = new Map();
-    for (const r of rows) {
-      if (r.manager_id == null) continue;
-      if (!children.has(r.manager_id)) children.set(r.manager_id, []);
-      children.get(r.manager_id).push(r.id);
+  // The org chart is read once and reused. Every change to users goes through the
+  // users routes, which call invalidate(); the next check rebuilds it.
+  let org = null;
+  function orgChart() {
+    if (!org) {
+      const rows = allUsers.all();
+      const children = new Map();
+      for (const r of rows) {
+        if (r.manager_id == null) continue;
+        if (!children.has(r.manager_id)) children.set(r.manager_id, []);
+        children.get(r.manager_id).push(r.id);
+      }
+      org = { rows, children, reports: new Map() };
     }
+    return org;
+  }
+  const invalidate = () => {
+    org = null;
+  };
+
+  // Everyone below userId in the org chart. Returned sets are shared: don't mutate.
+  function reportsOf(userId) {
+    const { children, reports } = orgChart();
+    if (reports.has(userId)) return reports.get(userId);
     const out = new Set();
     const stack = [...(children.get(userId) || [])];
     while (stack.length) {
@@ -32,6 +49,7 @@ export function makeAccess(db) {
       out.add(id);
       stack.push(...(children.get(id) || []));
     }
+    reports.set(userId, out);
     return out;
   }
 
@@ -45,8 +63,7 @@ export function makeAccess(db) {
 
   function projectIdsFor(user) {
     const ids = new Set(memberOf.all(user.id).map((r) => r.project_id));
-    const team = [...teamIds(user)];
-    const owned = db.prepare(`SELECT id FROM projects WHERE owner_id IN (${team.map(() => '?').join(',')})`).all(...team);
+    const owned = ownedBy.all(JSON.stringify([...teamIds(user)]));
     for (const r of owned) ids.add(r.id);
     return ids;
   }
@@ -105,6 +122,20 @@ export function makeAccess(db) {
     return false;
   }
 
+  // Who may change or remove a task's reviewer once one is set. The assignee alone
+  // may not, otherwise they could drop the review and mark their own work done.
+  // Adding a reviewer to a task without one only needs edit rights.
+  function canChangeReviewer(user, task) {
+    if (task.reviewer_id == null) return canEditTask(user, task);
+    if (isCeo(user) || task.reporter_id === user.id || task.reviewer_id === user.id) return true;
+    if (task.assignee_id != null && reportsOf(user.id).has(task.assignee_id)) return true;
+    if (task.project_id != null) {
+      const p = projectById.get(task.project_id);
+      if (p && canManageProject(user, p)) return true;
+    }
+    return false;
+  }
+
   // Reviewer can approve; so can anyone managing the reviewer or the CEO.
   function canReviewTask(user, task) {
     if (task.reviewer_id == null) return false;
@@ -112,7 +143,7 @@ export function makeAccess(db) {
   }
 
   function assignableIds(user, projectId = null) {
-    const rows = allUsers.all().filter((r) => r.active);
+    const rows = orgChart().rows.filter((r) => r.active);
     if (isCeo(user)) return new Set(rows.map((r) => r.id));
     const ids = teamIds(user);
     for (const r of rows) if (isManagerRole(r.role)) ids.add(r.id);
@@ -130,6 +161,7 @@ export function makeAccess(db) {
   const canAdminUsers = (user) => USER_ADMIN_ROLES.includes(user.role);
 
   return {
+    invalidate,
     reportsOf,
     teamIds,
     managesUser,
@@ -142,6 +174,7 @@ export function makeAccess(db) {
     canEditTask,
     canDeleteTask,
     canReviewTask,
+    canChangeReviewer,
     assignableIds,
     canAdminUsers,
   };

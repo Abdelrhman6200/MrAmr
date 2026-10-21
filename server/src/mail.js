@@ -58,8 +58,12 @@ export function notificationText(lang, n) {
 
 const linkFor = (appUrl, n) => (!appUrl ? null : n.link ? `${appUrl}${n.link}` : n.task_id ? `${appUrl}/?task=${n.task_id}` : appUrl);
 
-// Sends each user one email summarising their new notifications, then marks them emailed.
-export async function dispatchNotificationEmails(db, mailer, appUrl) {
+// Per-user retry back-off after a failed send: 1, 2, 4 … minutes, capped at 30.
+const backoff = new Map();
+
+// Sends each user one email summarising their new notifications. Rows are marked
+// emailed only once their email has gone out; failures are retried (within a day).
+export async function dispatchNotificationEmails(db, mailer, appUrl, { now = Date.now() } = {}) {
   if (!mailer.enabled) return 0;
   const rows = db
     .prepare(
@@ -72,8 +76,12 @@ export async function dispatchNotificationEmails(db, mailer, appUrl) {
   const mark = db.prepare('UPDATE notifications SET emailed = 1 WHERE id = ?');
   const byUser = new Map();
   for (const n of rows) {
-    mark.run(n.id);
-    if (!n.active || !n.email_notifications) continue;
+    // Nothing to send for people who opted out or left: settle these straight away.
+    if (!n.active || !n.email_notifications) {
+      mark.run(n.id);
+      continue;
+    }
+    if ((backoff.get(n.user_id)?.retryAt ?? 0) > now) continue;
     if (!byUser.has(n.user_id)) byUser.set(n.user_id, []);
     byUser.get(n.user_id).push(n);
   }
@@ -90,9 +98,13 @@ export async function dispatchNotificationEmails(db, mailer, appUrl) {
     });
     try {
       await mailer.send({ to: u.email, subject: t('mail.notifSubject', { n: list.length }), html, text: `${text}\n\n${t('mail.optOut')}` });
+      for (const n of list) mark.run(n.id);
+      backoff.delete(u.user_id);
       sent++;
     } catch (err) {
-      console.error('Notification email failed for', u.email, err.message);
+      const failures = (backoff.get(u.user_id)?.failures ?? 0) + 1;
+      backoff.set(u.user_id, { failures, retryAt: now + Math.min(60_000 * 2 ** (failures - 1), 30 * 60_000) });
+      console.error(`Notification email to ${u.email} failed (attempt ${failures}), will retry:`, err.message);
     }
   }
   return sent;

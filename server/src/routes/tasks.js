@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { transaction } from '../db.js';
 import { badRequest, forbidden, notFound, oneOf, optionalDate, optionalId, requiredString } from '../http.js';
 import { PRIORITIES, ROLES, STATUSES, TASK_TYPES, keys } from '../meta.js';
+import { nowUtc } from '../time.js';
 
 export const TASK_SELECT = `
   SELECT t.*, p.name AS project_name, p.color AS project_color,
@@ -57,6 +58,7 @@ export default function taskRoutes({ db, access }) {
     can_edit: access.canEditTask(user, t),
     can_delete: access.canDeleteTask(user, t),
     can_review: access.canReviewTask(user, t),
+    can_change_reviewer: access.canChangeReviewer(user, t),
   });
 
   function checkAssignee(user, assigneeId, projectId) {
@@ -182,7 +184,7 @@ export default function taskRoutes({ db, access }) {
           optionalDate(b.due_date, 'due_date') ?? null,
           b.estimate_hours === undefined || b.estimate_hours === '' || b.estimate_hours === null ? null : Number(b.estimate_hours),
           normaliseTags(b.tags) ?? '',
-          status === 'done' ? new Date().toISOString() : null,
+          status === 'done' ? nowUtc() : null,
         );
       const task = raw(Number(info.lastInsertRowid));
       log(task, req.user.id, 'created', title);
@@ -216,20 +218,26 @@ export default function taskRoutes({ db, access }) {
     }
     if (b.assignee_id !== undefined) {
       f.assignee_id = optionalId(b.assignee_id, 'assignee_id');
-      if (f.assignee_id !== t.assignee_id) checkAssignee(req.user, f.assignee_id, f.project_id ?? t.project_id);
+      if (f.assignee_id !== t.assignee_id) checkAssignee(req.user, f.assignee_id, f.project_id !== undefined ? f.project_id : t.project_id);
     }
     if (b.reviewer_id !== undefined) {
       f.reviewer_id = optionalId(b.reviewer_id, 'reviewer_id');
+      if (f.reviewer_id !== t.reviewer_id && !access.canChangeReviewer(req.user, t)) {
+        throw forbidden('Only the task creator, the reviewer or a manager can change who reviews this task');
+      }
       checkReviewer(f.reviewer_id);
     }
     const reviewerId = f.reviewer_id !== undefined ? f.reviewer_id : t.reviewer_id;
+    // Finishing is judged against the reviewer the task had before this edit, so a
+    // reviewer can't be removed and the task completed in the same request.
+    const gatekeeper = t.reviewer_id ?? reviewerId;
     if (b.status !== undefined) {
       f.status = oneOf(b.status, keys(STATUSES), 'status');
       if (f.status === 'in_review' && !reviewerId) throw badRequest('Pick a reviewer before sending a task to review');
-      if (f.status === 'done' && t.status !== 'done' && reviewerId && !access.canReviewTask(req.user, { ...t, reviewer_id: reviewerId })) {
+      if (f.status === 'done' && t.status !== 'done' && gatekeeper && !access.canReviewTask(req.user, { ...t, reviewer_id: gatekeeper })) {
         throw badRequest('This task has a reviewer — send it to review so they can approve it');
       }
-      if (f.status === 'done' && t.status !== 'done') f.completed_at = new Date().toISOString();
+      if (f.status === 'done' && t.status !== 'done') f.completed_at = nowUtc();
       if (f.status !== 'done') f.completed_at = null;
     }
 
@@ -283,7 +291,7 @@ export default function taskRoutes({ db, access }) {
     if (decision === 'changes' && !comment) throw badRequest('Explain what needs to change');
     transaction(db, () => {
       if (decision === 'approve') {
-        db.prepare("UPDATE tasks SET status = 'done', completed_at = ?, updated_at = datetime('now') WHERE id = ?").run(new Date().toISOString(), t.id);
+        db.prepare("UPDATE tasks SET status = 'done', completed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(t.id);
         log(t, req.user.id, 'approved', comment);
         notify(req.user, t.assignee_id, 'approved', `${req.user.name} approved "${t.title}"`, t.id, t.title);
         notify(req.user, t.reporter_id, 'approved', `${req.user.name} approved "${t.title}"`, t.id, t.title);

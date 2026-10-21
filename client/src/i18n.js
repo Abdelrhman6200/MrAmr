@@ -1206,6 +1206,8 @@ const arErrors = {
   'Only the Head of Customer Service can reassign calls': 'رئيس خدمة العملاء فقط يمكنه إعادة إسناد المكالمات',
   'The sheet has no rows to import': 'لا يحتوي الشيت على صفوف للاستيراد',
   'No rows have a name or phone number': 'لا توجد صفوف بها اسم أو رقم هاتف',
+  "Write a note": "اكتب ملاحظة",
+  "Only the task creator, the reviewer or a manager can change who reviews this task": "منشئ المهمة أو المراجِع أو المدير فقط يمكنه تغيير مراجِع هذه المهمة",
   "This reset link is invalid or has expired": "رابط إعادة التعيين غير صالح أو انتهت صلاحيته",
   "Too many failed sign-in attempts. Try again in a few minutes.": "محاولات دخول خاطئة كثيرة. حاول مرة أخرى بعد بضع دقائق.",
   "Name is missing": "الاسم غير موجود",

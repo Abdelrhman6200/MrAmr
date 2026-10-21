@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { publicUser, requireAuth, signToken, verifyPassword } from '../auth.js';
+import { hashPassword, publicUser, requireAuth, signToken, verifyPassword } from '../auth.js';
 import { HttpError, badRequest } from '../http.js';
 import { createLoginLimiter } from '../security.js';
 import { renderEmail } from '../mail.js';
@@ -7,6 +7,8 @@ import { translate } from '../../../client/src/i18n.js';
 import { createResetToken, findResetToken, setPassword } from '../passwords.js';
 
 const RESET_HOURS = 1;
+// Checked when an email has no account, so a wrong email takes as long as a wrong password.
+const DECOY_HASH = hashPassword('decoy-password-never-used');
 
 export default function authRoutes({ db, secret, mailer, appUrl }) {
   const r = Router();
@@ -25,7 +27,8 @@ export default function authRoutes({ db, secret, mailer, appUrl }) {
       throw new HttpError(429, 'Too many failed sign-in attempts. Try again in a few minutes.', 'rate_limited', { minutes: Math.ceil(wait / 60) });
     }
     const user = email && byEmail.get(String(email).trim());
-    if (!user || !user.active || !verifyPassword(String(password || ''), user.password_hash)) {
+    const passwordOk = verifyPassword(String(password || ''), user ? user.password_hash : DECOY_HASH);
+    if (!user || !user.active || !passwordOk) {
       limiter.fail(req.ip, email);
       throw new HttpError(401, 'Invalid email or password');
     }
@@ -45,7 +48,7 @@ export default function authRoutes({ db, secret, mailer, appUrl }) {
   });
 
   // Always answers the same way so it can't be used to discover who has an account.
-  r.post('/forgot', async (req, res) => {
+  r.post('/forgot', (req, res) => {
     const email = String(req.body?.email || '').trim();
     if (!canEmailResets()) return res.json({ ok: true, email_enabled: false });
     if (!email || resetLimiter.retryAfter(req.ip, email)) return res.json({ ok: true, email_enabled: true });
@@ -60,11 +63,8 @@ export default function authRoutes({ db, secret, mailer, appUrl }) {
         paragraphs: [t('mail.resetIntro', { name: user.name.split(' ')[0] }), t('mail.resetExpiry', { hours: RESET_HOURS }), t('mail.resetIgnore')],
         button: { url: `${appUrl}/reset?token=${token}`, label: t('mail.resetButton') },
       });
-      try {
-        await mailer.send({ to: user.email, subject: t('mail.resetSubject'), html, text });
-      } catch (err) {
-        console.error('Password reset email failed:', err.message);
-      }
+      // Not awaited: replying only after the send would reveal which emails have accounts.
+      mailer.send({ to: user.email, subject: t('mail.resetSubject'), html, text }).catch((err) => console.error('Password reset email failed:', err.message));
     }
     res.json({ ok: true, email_enabled: true });
   });

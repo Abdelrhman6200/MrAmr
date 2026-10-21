@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import { transaction } from '../db.js';
-import { createResetToken } from '../passwords.js';
+import { createResetToken, setPassword } from '../passwords.js';
 import { hashPassword, publicUser } from '../auth.js';
 import { badRequest, forbidden, notFound, oneOf, optionalId, requiredString } from '../http.js';
 import { ROLES, departmentOf } from '../meta.js';
@@ -58,6 +58,7 @@ export default function userRoutes({ db, access }) {
     const info = db
       .prepare('INSERT INTO users (name, email, password_hash, role, title, manager_id, avatar_color) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(name, email, hashPassword(b.password), role, b.title?.trim() || ROLES[role].label, managerId, color);
+    access.invalidate();
     res.status(201).json(withDept(byId.get(Number(info.lastInsertRowid))));
   });
 
@@ -102,6 +103,7 @@ export default function userRoutes({ db, access }) {
         }
       }),
     );
+    access.invalidate();
     res.json({
       created: results.filter((x) => x.status === 'created').length,
       skipped: results.filter((x) => x.status === 'skipped').length,
@@ -151,16 +153,19 @@ export default function userRoutes({ db, access }) {
         if (isSelf && !b.active) throw badRequest('You cannot deactivate yourself');
         fields.active = b.active ? 1 : 0;
       }
-      if (b.password !== undefined) {
-        if (typeof b.password !== 'string' || b.password.length < 8) throw badRequest('password must be at least 8 characters');
-        fields.password_hash = hashPassword(b.password);
-        fields.session_version = (target.session_version ?? 0) + 1;
+      if (b.password !== undefined && (typeof b.password !== 'string' || b.password.length < 8)) {
+        throw badRequest('password must be at least 8 characters');
       }
     }
     const keys = Object.keys(fields);
-    if (keys.length) {
-      db.prepare(`UPDATE users SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map((k) => fields[k]), target.id);
-    }
+    transaction(db, () => {
+      if (keys.length) {
+        db.prepare(`UPDATE users SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map((k) => fields[k]), target.id);
+      }
+      // Same path as a reset: signs them out everywhere and cancels outstanding reset links.
+      if (admin && b.password !== undefined) setPassword(db, target.id, b.password);
+    });
+    access.invalidate();
     res.json(withDept(byId.get(target.id)));
   });
 
