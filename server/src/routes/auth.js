@@ -7,12 +7,13 @@ import { background } from '../background.js';
 import { translate } from '../../../client/src/i18n.js';
 import { createResetToken, findResetToken, setPassword } from '../passwords.js';
 import { bump } from '../db.js';
+import { autoLoadSample } from '../seed.js';
 
 const RESET_HOURS = 1;
 // Checked when an email has no account, so a wrong email takes as long as a wrong password.
 const DECOY_HASH = hashPassword('decoy-password-never-used');
 
-export default function authRoutes({ db, secret, mailer, appUrl }) {
+export default function authRoutes({ db, secret, mailer, appUrl, autoSample }) {
   const r = Router();
   const byEmail = (email) => db.get('SELECT * FROM users WHERE email = ?', [String(email || '').trim().toLowerCase()]);
   const byId = (id) => db.get('SELECT * FROM users WHERE id = ?', [id]);
@@ -57,6 +58,7 @@ export default function authRoutes({ db, secret, mailer, appUrl }) {
       return created;
     });
     if (!user) throw new HttpError(409, 'TaskFlow is already set up. Sign in instead.', 'already_setup');
+    if (autoSample) await autoLoadSample(db, user.email).catch((err) => console.error('Loading the sample data failed:', err));
     res.status(201).json({ token: signToken(user, secret), user: publicUser(user) });
   });
 

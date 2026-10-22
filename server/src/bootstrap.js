@@ -1,12 +1,25 @@
 import { hashPassword, verifyPassword } from './auth.js';
 import { setPassword } from './passwords.js';
 import { bump } from './db.js';
-import { seed } from './seed.js';
+import { autoLoadSample, seed } from './seed.js';
 
 // First run on an empty database. With ADMIN_EMAIL and ADMIN_PASSWORD it creates
 // one Head of Company account (production); otherwise, where demo data is
 // allowed, it loads the demo organisation. Safe when several instances start at once.
-export async function bootstrap(db, env = process.env, { allowDemo = true } = {}) {
+export async function bootstrap(db, env = process.env, { allowDemo = true, autoSample = false } = {}) {
+  const outcome = await firstRun(db, env, allowDemo);
+  // Template data for trying the app, loaded once without anyone clicking anything.
+  if (autoSample) {
+    try {
+      await autoLoadSample(db, env.ADMIN_EMAIL);
+    } catch (err) {
+      console.error('Loading the sample data failed:', err);
+    }
+  }
+  return outcome;
+}
+
+async function firstRun(db, env, allowDemo) {
   if ((await db.get('SELECT COUNT(*) AS n FROM users')).n > 0 || env.ADMIN_RESET === '1') {
     await recoverAdmin(db, env);
     if ((await db.get('SELECT COUNT(*) AS n FROM users')).n > 0) return null;

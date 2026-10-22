@@ -9,6 +9,7 @@ export async function testDb({ withSeed = true } = {}) {
   if (url) {
     const tables = await db.all("SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename != 'app_state'");
     await db.run(`TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(', ')} RESTART IDENTITY CASCADE`);
+    await db.run("DELETE FROM app_state WHERE key <> 'schema'");
   }
   if (withSeed) await seed(db);
   return db;

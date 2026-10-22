@@ -61,5 +61,10 @@ test('with a database it serves the API at the rewritten path', { skip: !process
   });
   assert.equal(setup.status, 201);
   const { token } = await setup.json();
-  assert.equal((await fetch(`${base}/api/index?__path=tasks`, { headers: { authorization: `Bearer ${token}` } })).status, 200);
+  const tasks = await fetch(`${base}/api/index?__path=tasks`, { headers: { authorization: `Bearer ${token}` } });
+  assert.equal(tasks.status, 200);
+  // The template data was loaded for them without any button.
+  assert.ok((await tasks.json()).length > 20);
+  const dash = await (await fetch(`${base}/api/index?__path=dashboard`, { headers: { authorization: `Bearer ${token}` } })).json();
+  assert.ok(Object.values(dash.counts).reduce((a, b) => a + b, 0) >= 5);
 });

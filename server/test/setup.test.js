@@ -118,3 +118,19 @@ test('ADMIN_RESET creates the account when it does not exist', async () => {
   assert.equal(res.status, 200);
   assert.equal(res.body.user.role, 'ceo');
 });
+
+test('the sample loads by itself once, and stays removed after removal', async () => {
+  const { autoLoadSample, hasSampleData, removeSampleData } = await import('../src/seed.js');
+  const ceo = await db.get("SELECT * FROM users WHERE role = 'ceo' ORDER BY id LIMIT 1");
+  if (await hasSampleData(db)) await removeSampleData(db, ceo);
+  await db.run("DELETE FROM app_state WHERE key = 'sample_auto'");
+  const runs = await Promise.all([autoLoadSample(db, 'new.boss@x.io'), autoLoadSample(db, 'new.boss@x.io')]);
+  assert.deepEqual(runs.sort(), [false, true]);
+  assert.equal(await hasSampleData(db), true);
+  // Built under the preferred Head of Company.
+  const boss = await db.get("SELECT id FROM users WHERE email = 'new.boss@x.io'");
+  assert.equal((await db.get("SELECT manager_id FROM users WHERE email = 'ops@taskflow.local'")).manager_id, boss.id);
+  await removeSampleData(db, boss);
+  assert.equal(await autoLoadSample(db, 'new.boss@x.io'), false);
+  assert.equal(await hasSampleData(db), false);
+});

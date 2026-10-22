@@ -19,11 +19,11 @@ import { createMailer, emailDispatcher } from './mail.js';
 import { background } from './background.js';
 import { hasSampleData } from './seed.js';
 
-export function createApp({ db, secret, staticDir, mailer = createMailer({}), appUrl = null, corsOrigins = [], cronSecret = null }) {
+export function createApp({ db, secret, staticDir, mailer = createMailer({}), appUrl = null, corsOrigins = [], cronSecret = null, autoSample = false }) {
   const app = express();
   const access = makeAccess(db);
   // appUrl (APP_URL) is the public address used in emailed links; never derived from request headers.
-  const ctx = { db, secret, access, mailer, appUrl: appUrl ? appUrl.replace(/\/+$/, '') : null };
+  const ctx = { db, secret, access, mailer, autoSample, appUrl: appUrl ? appUrl.replace(/\/+$/, '') : null };
   const dispatchEmails = emailDispatcher(db, mailer, ctx.appUrl);
   app.locals.dispatchEmails = dispatchEmails;
 

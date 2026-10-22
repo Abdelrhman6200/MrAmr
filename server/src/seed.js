@@ -2,7 +2,7 @@
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { hashPassword } from './auth.js';
-import { bump, databaseUrl, openDb } from './db.js';
+import { bump, databaseUrl, openDb, readCounter } from './db.js';
 import { localDate, nowUtc, utcAgo, DAY } from './time.js';
 
 export const DEMO_PASSWORD = 'password123';
@@ -360,6 +360,30 @@ export async function removeSampleData(db, keeper) {
     await bump(tx, 'org');
     return removed;
   });
+}
+
+// Loads the sample data automatically, once per database, under the Head of
+// Company (`preferEmail`'s account if that is one). Once it has run, it never runs
+// again, so removing the sample keeps it removed. Safe when instances race.
+export async function autoLoadSample(db, preferEmail = null) {
+  if (await readCounter(db, 'sample_auto')) return false;
+  const ceo = await db.get(
+    "SELECT * FROM users WHERE role = 'ceo' AND active = 1 ORDER BY (email = ?) DESC, id LIMIT 1",
+    [String(preferEmail || '').trim().toLowerCase()],
+  );
+  if (!ceo) return false; // nobody to own it yet; try again on a later start
+  // Claim the one run; whoever bumps the counter to 1 does it.
+  if ((await bump(db, 'sample_auto')) !== 1) return false;
+  if (await hasSampleData(db)) return false;
+  if (await db.get("SELECT 1 FROM users WHERE email LIKE '%@taskflow.local' LIMIT 1")) return false;
+  try {
+    await seed(db, { ceo });
+  } catch (err) {
+    await db.run("UPDATE app_state SET value = 0 WHERE key = 'sample_auto'"); // try again next start
+    throw err;
+  }
+  console.log(`Loaded the sample data under ${ceo.email}.`);
+  return true;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

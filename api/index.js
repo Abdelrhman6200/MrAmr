@@ -51,7 +51,8 @@ async function init() {
   try {
     // Optional: ADMIN_EMAIL/ADMIN_PASSWORD create the first account; otherwise the sign-in
     // page asks for it. Demo data only when asked for with DEMO_DATA=1.
-    await bootstrap(db, process.env, { allowDemo: process.env.DEMO_DATA === '1' });
+    // The sample team and tasks load once by themselves (SAMPLE_DATA=0 turns that off).
+    await bootstrap(db, process.env, { allowDemo: process.env.DEMO_DATA === '1', autoSample: process.env.SAMPLE_DATA !== '0' });
   } catch (err) {
     await db.close().catch(() => {});
     throw err.message.startsWith('ADMIN_') ? new SetupError(err.message) : err;
@@ -63,6 +64,7 @@ async function init() {
     appUrl: process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null),
     corsOrigins: corsOrigins(),
     cronSecret: process.env.CRON_SECRET,
+    autoSample: process.env.SAMPLE_DATA !== '0',
   });
 }
 
