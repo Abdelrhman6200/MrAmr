@@ -158,6 +158,22 @@ export async function seed(db, { ceo = null } = {}) {
     await task(null, 'Q4 budget review', 'operations', 'todo', 'high', 'ops', 'ceo', 6);
     await task(null, 'Monthly all-hands agenda', 'general', 'todo', 'medium', 'ceo', 'ceo', 10);
     await task(null, 'Hire two new instructors', 'operations', 'in_progress', 'medium', 'hoc', 'ops', 21, { tags: 'hiring' });
+    // Work waiting on the Head of Company, so their own dashboard has something in it.
+    await task(campaign, 'Approve the Back-to-School campaign budget', 'campaign', 'todo', 'urgent', 'ceo', 'mkt', 0, {
+      tags: 'budget',
+      desc: 'Paid ads, influencer posts and printed flyers for the new term. Total: 85,000 EGP.',
+      comments: [['mkt', 'The breakdown per channel is attached in the campaign folder.']],
+    });
+    await task(null, 'Sign the renewal contract with Maadi Center', 'operations', 'todo', 'high', 'ceo', 'ops', -2, { tags: 'centers,contracts' });
+    await task(null, 'Choose the platform pricing for next term', 'operations', 'in_progress', 'high', 'ceo', 'po', 3, {
+      checklist: [['Compare competitor prices', true], ['Review last term sign-ups', true], ['Decide on early-bird discount', false]],
+    });
+    await task(null, 'Interview candidates for Marketing Lead', 'general', 'todo', 'medium', 'ceo', 'mkt', 5, { tags: 'hiring' });
+    const launchPlan = await task(null, 'Term 1 launch plan', 'operations', 'in_review', 'high', 'ops', 'ceo', 1, {
+      reviewer: 'ceo',
+      desc: 'Timeline, owners and risks for launching Physics 101 on the platform and in the centers.',
+      comments: [['ops', 'Ready for your sign-off. The main risk is the Safari video bug.']],
+    });
 
     // Customer Service call list
     const callList = (
@@ -224,6 +240,10 @@ export async function seed(db, { ceo = null } = {}) {
     const insNote = prepare('INSERT INTO notifications (user_id, type, message, task_id, params) VALUES (?, ?, ?, ?, ?)');
     await insNote.run(ids.cq, 'review_requested', 'Nour Adel requested your review on "Record Lesson 2: Newton’s Laws"', lesson2, JSON.stringify({ actor: 'Nour Adel', title: 'Record Lesson 2: Newton’s Laws' }));
     await insNote.run(ids.sys, 'assigned', 'Rana Kamal assigned you "Video player freezes on Safari"', safari, JSON.stringify({ actor: 'Rana Kamal', title: 'Video player freezes on Safari' }));
+
+    const ceoNote = prepare('INSERT INTO notifications (user_id, type, message, task_id, params, read) VALUES (?, ?, ?, ?, ?, 0)');
+    await ceoNote.run(ids.ceo, 'review_requested', 'Lina Mansour requested your review on "Term 1 launch plan"', launchPlan, JSON.stringify({ actor: 'Lina Mansour', title: 'Term 1 launch plan' }));
+    await ceoNote.run(ids.ceo, 'blocked', '"Fix audio sync on Lesson 1 intro" is blocked', null, JSON.stringify({ actor: 'Youssef Samir', title: 'Fix audio sync on Lesson 1 intro' }));
 
     // Sample notifications are history, not news: never email them.
     await tx.run('UPDATE notifications SET emailed = 1');
