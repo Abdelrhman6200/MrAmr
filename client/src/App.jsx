@@ -3,6 +3,7 @@ import { AppProvider, useApp } from './context.jsx';
 import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
 import ResetPassword from './pages/ResetPassword.jsx';
+import ServerUnreachable from './pages/ServerUnreachable.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Tasks from './pages/Tasks.jsx';
 import Projects from './pages/Projects.jsx';
@@ -16,9 +17,10 @@ import Calls from './pages/Calls.jsx';
 import Centers from './pages/Centers.jsx';
 
 function Routed() {
-  const { user, booting, meta } = useApp();
+  const { user, booting, meta, bootError } = useApp();
   const location = useLocation();
-  if (booting || !meta) return <div className="boot">…</div>;
+  if (booting) return <div className="boot">…</div>;
+  if (bootError || !meta) return <ServerUnreachable />;
   // Reset links work whether or not someone is signed in on this device.
   if (location.pathname === '/reset') return <ResetPassword />;
   if (!user) return <Login />;

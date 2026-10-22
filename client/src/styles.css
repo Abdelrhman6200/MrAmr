@@ -2018,3 +2018,13 @@ a.stat:hover {
     padding: 4px 6px;
   }
 }
+
+.code-box {
+  display: block;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  word-break: break-all;
+}

@@ -20,6 +20,7 @@ export function AppProvider({ children }) {
   const [meta, setMeta] = useState(null);
   const [users, setUsers] = useState([]);
   const [booting, setBooting] = useState(true);
+  const [bootError, setBootError] = useState(null);
   // Bumped after any mutation so mounted views refetch.
   const [version, setVersion] = useState(0);
   const [toast, setToast] = useState(null);
@@ -58,22 +59,28 @@ export function AppProvider({ children }) {
     });
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setMeta(await api.get('/meta'));
-        if (getToken()) {
-          const me = (await api.get('/auth/me')).user;
-          adoptUserLang(me);
-          setUser(me);
-        }
-      } catch {
-        setToken(null);
-      } finally {
-        setBooting(false);
+  const boot = useCallback(async () => {
+    setBooting(true);
+    setBootError(null);
+    try {
+      setMeta(await api.get('/meta'));
+      if (getToken()) {
+        const me = (await api.get('/auth/me')).user;
+        adoptUserLang(me);
+        setUser(me);
       }
-    })();
+    } catch (err) {
+      // Only a rejected login clears it; a network blip must not sign people out.
+      if (err.status === 401) setToken(null);
+      else setBootError(err.code === 'server_unreachable' ? 'server_unreachable' : 'unknown');
+    } finally {
+      setBooting(false);
+    }
   }, []);
+
+  useEffect(() => {
+    boot();
+  }, [boot]);
 
   useEffect(() => {
     if (user) api.get('/users').then(setUsers).catch(() => {});
@@ -126,6 +133,8 @@ export function AppProvider({ children }) {
       meta,
       users,
       booting,
+      bootError,
+      retryBoot: boot,
       version,
       refresh,
       login,
@@ -141,7 +150,7 @@ export function AppProvider({ children }) {
       isUserAdmin: user ? meta?.userAdminRoles.includes(user.role) : false,
       userById: (id) => users.find((u) => u.id === id),
     };
-  }, [user, meta, users, booting, version, refresh, logout, notify, toast, lang, setLang]);
+  }, [user, meta, users, booting, bootError, boot, version, refresh, logout, notify, toast, lang, setLang]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

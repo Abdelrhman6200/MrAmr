@@ -3,7 +3,7 @@ const TOKEN_KEY = 'taskflow.token';
 // Where the API lives. Empty means the same site (local dev, Docker). When the web app
 // is hosted separately (e.g. on Vercel), set VITE_API_URL at build time to the server's
 // address, like https://taskflow-api.up.railway.app
-const API_BASE = `${(import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')}/api`;
+export const API_BASE = `${(import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')}/api`;
 
 export const getToken = () => {
   try {
@@ -35,14 +35,24 @@ let translateMessage = (m) => m;
 export const setErrorTranslator = (fn) => (translateMessage = fn);
 export const setUnauthorizedHandler = (fn) => (onUnauthorized = fn);
 
+// Thrown when the API can't be reached or something other than the API answered
+// (e.g. a static host returning its index.html because VITE_API_URL is missing).
+const unreachable = () => new ApiError(0, 'server_unreachable', 'server_unreachable');
+
 async function request(method, path, body) {
   const token = getToken();
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw unreachable();
+  }
   if (res.status === 204) return null;
+  if (!(res.headers.get('content-type') || '').includes('application/json')) throw unreachable();
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401 && path !== '/auth/login') onUnauthorized();
