@@ -1,38 +1,35 @@
 // Vercel serverless entry: every /api/* request is routed here (see vercel.json).
 // The app is created once per warm instance and reused across requests.
+//
+// The only thing it needs is a Postgres database: add one from the project's
+// Storage tab in Vercel and it sets DATABASE_URL (or POSTGRES_URL) for us.
+// The session-signing key is generated and kept in the database, and the first
+// Head of Company account is created from the sign-in page.
 import { createApp } from '../server/src/app.js';
-import { openDb } from '../server/src/db.js';
-import { corsOrigins, loadSecret } from '../server/src/config.js';
+import { databaseUrl, openDb, storedSecret } from '../server/src/db.js';
+import { corsOrigins } from '../server/src/config.js';
 import { bootstrap } from '../server/src/bootstrap.js';
 import { createMailer } from '../server/src/mail.js';
 
 // A deployment setting is missing or wrong; the message is shown on the sign-in screen.
 class SetupError extends Error {}
 
-const setting = (fn) => {
-  try {
-    return fn();
-  } catch (err) {
-    throw new SetupError(err.message);
-  }
-};
-
 // Explains a failed database connection without echoing the error itself: it can
-// contain pieces of a malformed DATABASE_URL, password included.
+// contain pieces of a malformed connection string, password included.
 function databaseProblem(err) {
   if (err.message.startsWith('DATABASE_URL')) return err.message;
   // Supabase's direct address (db.<ref>.supabase.co) is IPv6-only, which Vercel can't reach.
-  if (/@db\.[a-z0-9]+\.supabase\.co/.test(process.env.DATABASE_URL)) {
-    return 'DATABASE_URL is Supabase\'s direct connection, which Vercel cannot reach. Use the Transaction pooler connection string (port 6543).';
+  if (/@db\.[a-z0-9]+\.supabase\.co/.test(databaseUrl())) {
+    return "DATABASE_URL is Supabase's direct connection, which Vercel cannot reach. Use the Transaction pooler connection string (port 6543).";
   }
   const reasons = {
-    ENOTFOUND: 'the database address in DATABASE_URL was not found',
-    ECONNREFUSED: 'the database refused the connection (check the port: 6543 for the Transaction pooler)',
+    ENOTFOUND: 'the database address was not found',
+    ECONNREFUSED: 'the database refused the connection',
     ETIMEDOUT: 'the database did not answer in time',
-    '28P01': 'the database password in DATABASE_URL is wrong',
-    '28000': 'the database user in DATABASE_URL was not accepted',
-    '3D000': 'the database name in DATABASE_URL does not exist',
-    XX000: 'the database pooler rejected the connection (check the user name, e.g. postgres.<project-ref>)',
+    '28P01': 'the database password is wrong',
+    '28000': 'the database user was not accepted',
+    '3D000': 'the database does not exist',
+    XX000: 'the database pooler rejected the connection',
   };
   return `Could not connect to the database: ${reasons[err.code] || 'see the Functions logs in Vercel for details'}.`;
 }
@@ -40,10 +37,9 @@ function databaseProblem(err) {
 let ready;
 
 async function init() {
-  if (!process.env.DATABASE_URL) {
-    throw new SetupError('DATABASE_URL is not set. Add your Supabase connection string (Transaction pooler) in the Vercel project settings.');
+  if (!databaseUrl()) {
+    throw new SetupError('No database is connected. In Vercel open this project → Storage → Create Database (Neon Postgres), connect it to the project, then redeploy.');
   }
-  const secret = setting(loadSecret);
   process.env.TRUST_PROXY ||= '1'; // Vercel's edge sets X-Forwarded-For to the real client address
   let db;
   try {
@@ -53,16 +49,16 @@ async function init() {
     throw new SetupError(databaseProblem(err));
   }
   try {
-    // Demo data only when asked for: a fresh production database waits for ADMIN_EMAIL/ADMIN_PASSWORD.
-    const outcome = await bootstrap(db, process.env, { allowDemo: process.env.DEMO_DATA === '1' });
-    if (outcome === 'empty') throw new SetupError('ADMIN_EMAIL and ADMIN_PASSWORD are not set, so there is no account to sign in with yet.');
+    // Optional: ADMIN_EMAIL/ADMIN_PASSWORD create the first account; otherwise the sign-in
+    // page asks for it. Demo data only when asked for with DEMO_DATA=1.
+    await bootstrap(db, process.env, { allowDemo: process.env.DEMO_DATA === '1' });
   } catch (err) {
     await db.close().catch(() => {});
-    throw err instanceof SetupError || !err.message.startsWith('ADMIN_') ? err : new SetupError(err.message);
+    throw err.message.startsWith('ADMIN_') ? new SetupError(err.message) : err;
   }
   return createApp({
     db,
-    secret,
+    secret: process.env.AUTH_SECRET || (await storedSecret(db, 'auth')),
     mailer: createMailer(),
     appUrl: process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null),
     corsOrigins: corsOrigins(),

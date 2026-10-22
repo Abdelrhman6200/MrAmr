@@ -1,12 +1,12 @@
 // Long-running server: local development or any Node host.
 // (On Vercel, api/index.js serves the API instead.)
 import { createApp } from './app.js';
-import { openDb } from './db.js';
+import { databaseUrl, openDb } from './db.js';
 import { PORT, STATIC_DIR, corsOrigins, loadSecret, localDataDir } from './config.js';
 import { bootstrap } from './bootstrap.js';
 import { createMailer, startNotificationEmails } from './mail.js';
 
-const db = await openDb({ dataDir: process.env.DATABASE_URL ? undefined : localDataDir() });
+const db = await openDb({ dataDir: databaseUrl() ? undefined : localDataDir() });
 await bootstrap(db);
 
 const mailer = createMailer();

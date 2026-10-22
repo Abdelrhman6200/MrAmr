@@ -1,5 +1,5 @@
 // Database access. Everything is Postgres:
-//  - with DATABASE_URL (e.g. Supabase) it uses a real Postgres server via `pg`;
+//  - with DATABASE_URL (Vercel Postgres/Neon, Supabase…) it uses a real Postgres server via `pg`;
 //  - without it (local development, tests) it uses PGlite, Postgres
 //    compiled to WebAssembly, stored in DATA_DIR or kept in memory.
 //
@@ -10,7 +10,7 @@
 const NOW = "to_char(timezone('UTC', now()), 'YYYY-MM-DD HH24:MI:SS')";
 
 // Bump when the schema below changes; startup re-applies it once.
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -234,6 +234,12 @@ CREATE TABLE IF NOT EXISTS app_state (
   key TEXT PRIMARY KEY,
   value BIGINT NOT NULL DEFAULT 0
 );
+
+-- Generated secrets (e.g. the key that signs sign-in sessions when AUTH_SECRET isn't set).
+CREATE TABLE IF NOT EXISTS app_secrets (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 `;
 
 // Turns `?` placeholders into $1, $2 … (ignoring any inside quoted strings).
@@ -368,8 +374,12 @@ async function createPglite(dataDir) {
   };
 }
 
+// The connection string. Vercel's Neon integration sets DATABASE_URL; its Supabase
+// integration sets POSTGRES_URL.
+export const databaseUrl = (env = process.env) => env.DATABASE_URL || env.POSTGRES_URL || '';
+
 // Opens the database and makes sure the schema exists.
-export async function openDb({ url = process.env.DATABASE_URL, dataDir } = {}) {
+export async function openDb({ url = databaseUrl(), dataDir } = {}) {
   const db = url ? await createPostgres(url) : await createPglite(dataDir);
   await ensureSchema(db);
   return db;
@@ -404,4 +414,11 @@ export async function bump(q, key) {
 export async function readCounter(q, key) {
   const row = await q.get('SELECT value FROM app_state WHERE key = ?', [key]);
   return row ? Number(row.value) : 0;
+}
+
+// A random secret generated once and shared by every server instance.
+export async function storedSecret(db, key) {
+  const { randomBytes } = await import('node:crypto');
+  await db.run('INSERT INTO app_secrets (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING', [key, randomBytes(32).toString('hex')]);
+  return (await db.get('SELECT value FROM app_secrets WHERE key = ?', [key])).value;
 }

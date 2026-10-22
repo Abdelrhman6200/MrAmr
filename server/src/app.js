@@ -45,6 +45,8 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
 
   // The login page only offers demo accounts while the demo company is loaded.
   const isDemo = async () => !!(await db.get("SELECT 1 FROM users WHERE email = 'ceo@taskflow.local' AND active = 1"));
+  // Until the first account exists, the web app shows a set-up form instead of sign-in.
+  const needsSetup = async () => !(await db.get('SELECT 1 FROM users LIMIT 1'));
 
   const api = express.Router();
   api.get('/health', async (_req, res) => {
@@ -52,7 +54,7 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
     res.json({ ok: true });
   });
   api.get('/meta', async (_req, res) =>
-    res.json({ departments: DEPARTMENTS, roles: ROLES, statuses: STATUSES, priorities: PRIORITIES, taskTypes: TASK_TYPES, projectStatuses: PROJECT_STATUSES, userAdminRoles: USER_ADMIN_ROLES, callStatuses: CALL_STATUSES, centerAdminRoles: CENTER_ADMIN_ROLES, weekdays: WEEKDAYS, emailEnabled: mailer.enabled, resetByEmail: mailer.enabled && !!ctx.appUrl, demo: await isDemo() }),
+    res.json({ departments: DEPARTMENTS, roles: ROLES, statuses: STATUSES, priorities: PRIORITIES, taskTypes: TASK_TYPES, projectStatuses: PROJECT_STATUSES, userAdminRoles: USER_ADMIN_ROLES, callStatuses: CALL_STATUSES, centerAdminRoles: CENTER_ADMIN_ROLES, weekdays: WEEKDAYS, emailEnabled: mailer.enabled, resetByEmail: mailer.enabled && !!ctx.appUrl, demo: await isDemo(), needsSetup: await needsSetup() }),
   );
   // Scheduled sweep (Vercel Cron) that retries any notification emails left behind.
   api.get('/cron/emails', async (req, res) => {

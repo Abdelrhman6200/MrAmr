@@ -3,6 +3,7 @@ import { AppProvider, useApp } from './context.jsx';
 import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
 import ResetPassword from './pages/ResetPassword.jsx';
+import Setup from './pages/Setup.jsx';
 import ServerUnreachable from './pages/ServerUnreachable.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Tasks from './pages/Tasks.jsx';
@@ -23,7 +24,7 @@ function Routed() {
   if (bootError || !meta) return <ServerUnreachable />;
   // Reset links work whether or not someone is signed in on this device.
   if (location.pathname === '/reset') return <ResetPassword />;
-  if (!user) return <Login />;
+  if (!user) return meta.needsSetup ? <Setup /> : <Login />;
   return (
     <Layout>
       <Routes>

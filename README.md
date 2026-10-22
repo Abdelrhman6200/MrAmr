@@ -18,7 +18,7 @@ For development, with hot reload for both the API and the UI:
 npm run dev       # UI on http://localhost:5173 (proxies /api to :3001)
 ```
 
-Locally the app uses a built-in Postgres database ([PGlite](https://pglite.dev)) stored in `./data`, so there is nothing else to install. Put a `DATABASE_URL` in `.env` (see `.env.example`) to use Supabase instead.
+Locally the app uses a built-in Postgres database ([PGlite](https://pglite.dev)) stored in `./data`, so there is nothing else to install. Put a `DATABASE_URL` in `.env` (see `.env.example`) to use a hosted Postgres database instead.
 
 On first start with an empty database the app loads a demo organisation. **Every demo account uses the password `password123`.** The login screen has one-click buttons for each role. To wipe the local data and reload the demo, run `npm run seed`.
 
@@ -100,7 +100,7 @@ server/src/
   app.js            Express app factory
   access.js         hierarchy-based permission rules
   meta.js           roles, departments, statuses, priorities, task types
-  db.js             Postgres schema and connection (Supabase via DATABASE_URL, PGlite otherwise)
+  db.js             Postgres schema and connection (hosted Postgres via DATABASE_URL, PGlite otherwise)
   routes/           auth, users, projects, tasks, dashboard/reports, notifications, calls, centers, admin
   mail.js           email (password resets, notification emails)
   seed.js           demo organisation
@@ -114,45 +114,37 @@ client/src/
 
 ## Configuration
 
+On Vercel nothing is required except a connected database (see below). Everything else is optional.
+
 | Variable | | |
 | --- | --- | --- |
-| `DATABASE_URL` | **required on Vercel** | Supabase connection string (Transaction pooler, port 6543). Without it the app uses the built-in local database in `DATA_DIR` (default `./data`). |
-| `AUTH_SECRET` | **required on Vercel** | signs sign-in sessions; any long random string (`openssl rand -hex 32`). Locally one is generated into `./data/.secret`. Changing it signs everyone out. |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | first run | used only while the database has no users: creates this one Head of Company account and **no demo data**. Locally, without them, the demo company is loaded (on Vercel only if `DEMO_DATA=1`). |
-| `APP_TIMEZONE` | `Africa/Cairo` | time zone for "today", overdue and call-backs. Vercel servers run in UTC, so this matters. |
+| `DATABASE_URL` / `POSTGRES_URL` | set by Vercel | the Postgres connection string. Vercel fills it in when you connect a database from the **Storage** tab. Locally, without it, the app uses the built-in database in `DATA_DIR` (default `./data`). |
+| `APP_TIMEZONE` | `Africa/Cairo` | time zone for "today", overdue and call-backs. |
+| `AUTH_SECRET` | generated | signs sign-in sessions. If unset, a random key is generated once and kept in the database. |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | optional | creates the first Head of Company account automatically. Without them, the site asks for it on first visit. |
+| `DEMO_DATA` | optional | `1` loads the demo company into an empty database on Vercel (locally the demo loads by default). |
 | `APP_URL` | optional | public address used for links in emails. On Vercel it defaults to the production domain. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `MAIL_FROM` | optional | an email account to send from (Google Workspace, Microsoft 365, or any SMTP service). Without `SMTP_HOST` the app works but sends no email. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `MAIL_FROM` | optional | an email account to send from. Without `SMTP_HOST` the app works but sends no email. |
 | `CRON_SECRET` | optional | protects the daily email retry job (`/api/cron/emails`); Vercel Cron sends it automatically. |
-| `DATABASE_CA` | optional | Supabase's CA certificate (Settings → Database → SSL), to verify the database's TLS certificate. Connections are always encrypted. |
-| `CORS_ORIGIN` | optional | only if the web app is hosted on a different address from the API: its address(es), comma-separated; `*` matches one part of a domain. |
+| `DATABASE_CA` | optional | the database's CA certificate, to verify its TLS certificate. Connections are always encrypted. |
+| `CORS_ORIGIN` | optional | only if the web app is hosted on a different address from the API. |
 | `PORT`, `TRUST_PROXY` | local server | port (default `3001`); set `TRUST_PROXY=1` behind nginx/Caddy. |
 
-## Deploying: Vercel + Supabase
+## Deploying on Vercel
 
-Vercel hosts the web app and runs the API as a serverless function (`api/index.js`); Supabase is the database. Both have free plans that are enough to start.
+Everything runs inside one Vercel project: the web app, the API (a serverless function, `api/index.js`) and the database (Vercel's built-in Postgres, provided by Neon, on the free plan).
 
-**1. Supabase (database)**
-1. Create a project at [supabase.com](https://supabase.com). Choose a region close to your users (and later the same region for Vercel's functions), and save the **database password** it asks for.
-2. Open **Connect** (top of the project page) → **Connection string** → **Transaction pooler**. Copy the URI. It looks like
-   `postgresql://postgres.abcdefghijkl:[YOUR-PASSWORD]@aws-0-eu-central-1.pooler.supabase.com:6543/postgres`.
-   Replace `[YOUR-PASSWORD]` with the database password. This string is a secret: paste it only into Vercel.
+1. **Import the project:** in Vercel, **Add New → Project** → import this repository. Leave the build settings as they are (`vercel.json` has them) and deploy. The site will say no database is connected yet; that's expected.
+2. **Add the database:** open the project → **Storage** → **Create Database** → **Neon** (Serverless Postgres) → pick the region closest to your users → **Create**, and connect it to this project (all environments). Vercel adds the connection settings for you.
+3. **Redeploy:** **Deployments** → ⋯ on the latest one → **Redeploy**.
+4. **Open the site:** the first visit shows **"Let's set up TaskFlow"**. Enter your name, email and a password to create the Head of Company account. Do this straight after deploying: the page only appears until the first account exists. Then add your team from **Users** (one by one or from a spreadsheet).
+5. Optional: **Settings → Functions → Function Region**, choose the same region as the database to keep pages fast; and add `SMTP_*` variables for email.
 
-The app creates its own tables on first start. The publishable/anon key is not used: the browser never talks to Supabase directly, only to the API.
+If something isn't set up, the site says what and how to fix it. `…/api/health` answers `{"ok":true}` when the API can reach the database.
 
-**2. Vercel (web app + API)**
-1. **Add New → Project** → import this repository. Vercel reads `vercel.json`; leave the build settings as they are.
-2. **Settings → Environment Variables** (Production and Preview):
-   - `DATABASE_URL` = the Supabase string from step 1
-   - `AUTH_SECRET` = a long random string
-   - `ADMIN_EMAIL`, `ADMIN_PASSWORD` (8+ characters), `ADMIN_NAME` = the first Head of Company account
-   - `APP_TIMEZONE` = `Africa/Cairo`
-   - optional: the `SMTP_*` settings and `MAIL_FROM` for email, and `CRON_SECRET`
-3. Deploy (or **Deployments → ⋯ → Redeploy** after changing variables). Open the site and sign in with `ADMIN_EMAIL`.
-4. Optional: **Settings → Functions → Function Region**: pick the region nearest your Supabase project; every page load talks to the database, so this keeps the app fast.
+Already have a Postgres database elsewhere (Supabase, etc.)? Put its connection string in `DATABASE_URL` instead of step 2. For Supabase use the **Transaction pooler** string (port 6543).
 
-If a setting is missing, the sign-in page says which one. `…/api/health` answers `{"ok":true}` when the API can reach the database.
-
-**Backups:** Supabase keeps daily backups on its paid plans. Any time, the Head of Company or Operations Manager can also click **Download backup** on the Users page for a JSON copy of every table.
+**Backups:** the database keeps its own restore history (see the database's page under Storage). Any time, the Head of Company or Operations Manager can also click **Download backup** on the Users page for a JSON copy of every table.
 
 **Passwords:** people can click **Forgot password?** on the sign-in page to get a one-hour reset link by email, once `SMTP_*` is set. Without email, the Head of Company or Operations Manager opens the person in **Users → Edit → Create password reset link** and sends that link privately (for example on WhatsApp). It works once and lasts 72 hours. Resetting or changing a password signs that person out everywhere else.
 

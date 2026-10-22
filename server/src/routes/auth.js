@@ -6,6 +6,7 @@ import { renderEmail } from '../mail.js';
 import { background } from '../background.js';
 import { translate } from '../../../client/src/i18n.js';
 import { createResetToken, findResetToken, setPassword } from '../passwords.js';
+import { bump } from '../db.js';
 
 const RESET_HOURS = 1;
 // Checked when an email has no account, so a wrong email takes as long as a wrong password.
@@ -35,6 +36,28 @@ export default function authRoutes({ db, secret, mailer, appUrl }) {
     }
     await limiter.succeed(req.ip, email);
     res.json({ token: signToken(user, secret), user: publicUser(user) });
+  });
+
+  // First run: while nobody has an account, the first visitor creates the Head of Company.
+  r.post('/setup', async (req, res) => {
+    const b = req.body || {};
+    const name = String(b.name || '').trim().slice(0, 120);
+    const email = String(b.email || '').trim().toLowerCase();
+    if (!name) throw badRequest('name is required');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) throw badRequest('email is invalid');
+    if (typeof b.password !== 'string' || b.password.length < 8) throw badRequest('password must be at least 8 characters');
+    const user = await db.tx(async (tx) => {
+      await tx.run('SELECT pg_advisory_xact_lock(4244)');
+      if ((await tx.get('SELECT COUNT(*) AS n FROM users')).n > 0) return null;
+      const created = await tx.get(
+        "INSERT INTO users (name, email, password_hash, role, avatar_color, language) VALUES (?, ?, ?, 'ceo', '#15803d', ?) RETURNING *",
+        [name, email, hashPassword(b.password), b.language === 'ar' ? 'ar' : 'en'],
+      );
+      await bump(tx, 'org');
+      return created;
+    });
+    if (!user) throw new HttpError(409, 'TaskFlow is already set up. Sign in instead.', 'already_setup');
+    res.status(201).json({ token: signToken(user, secret), user: publicUser(user) });
   });
 
   r.get('/me', requireAuth(db, secret), (req, res) => res.json({ user: publicUser(req.user) }));

@@ -1,7 +1,7 @@
 // Demo organisation. Run `npm run seed` to wipe the database and reload it.
 import { fileURLToPath } from 'node:url';
 import { hashPassword } from './auth.js';
-import { bump, openDb } from './db.js';
+import { bump, databaseUrl, openDb } from './db.js';
 import { localDate, nowUtc, utcAgo, DAY } from './time.js';
 
 export const DEMO_PASSWORD = 'password123';
@@ -222,8 +222,8 @@ export async function seed(db) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { localDataDir } = await import('./config.js');
-  const db = await openDb({ dataDir: process.env.DATABASE_URL ? undefined : localDataDir() });
-  if (process.argv.includes('--reset') && process.env.DATABASE_URL && !process.argv.includes('--force')) {
+  const db = await openDb({ dataDir: databaseUrl() ? undefined : localDataDir() });
+  if (process.argv.includes('--reset') && databaseUrl() && !process.argv.includes('--force')) {
     console.error('DATABASE_URL is set: this would wipe that database. Add --force if that is really what you want.');
     process.exit(1);
   }
