@@ -117,3 +117,11 @@ test('call stats are for Customer Service managers only', async () => {
   assert.ok(mohamed.open >= 1);
   assert.ok(mohamed.logged >= 1);
 });
+
+test('only the Head of Company can load or remove sample data', async () => {
+  assert.equal((await call('ops', 'POST', '/admin/sample')).status, 403);
+  assert.equal((await call('ops', 'DELETE', '/admin/sample')).status, 403);
+  assert.equal((await call('hoc', 'DELETE', '/admin/sample')).status, 403);
+  // The demo company is itself sample data, so it can't be loaded twice.
+  assert.equal((await call('ceo', 'POST', '/admin/sample')).status, 409);
+});

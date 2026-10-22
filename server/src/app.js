@@ -17,6 +17,7 @@ import adminRoutes from './routes/admin.js';
 import { cors, securityHeaders } from './security.js';
 import { createMailer, emailDispatcher } from './mail.js';
 import { background } from './background.js';
+import { hasSampleData } from './seed.js';
 
 export function createApp({ db, secret, staticDir, mailer = createMailer({}), appUrl = null, corsOrigins = [], cronSecret = null }) {
   const app = express();
@@ -54,7 +55,7 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
     res.json({ ok: true });
   });
   api.get('/meta', async (_req, res) =>
-    res.json({ departments: DEPARTMENTS, roles: ROLES, statuses: STATUSES, priorities: PRIORITIES, taskTypes: TASK_TYPES, projectStatuses: PROJECT_STATUSES, userAdminRoles: USER_ADMIN_ROLES, callStatuses: CALL_STATUSES, centerAdminRoles: CENTER_ADMIN_ROLES, weekdays: WEEKDAYS, emailEnabled: mailer.enabled, resetByEmail: mailer.enabled && !!ctx.appUrl, demo: await isDemo(), needsSetup: await needsSetup() }),
+    res.json({ departments: DEPARTMENTS, roles: ROLES, statuses: STATUSES, priorities: PRIORITIES, taskTypes: TASK_TYPES, projectStatuses: PROJECT_STATUSES, userAdminRoles: USER_ADMIN_ROLES, callStatuses: CALL_STATUSES, centerAdminRoles: CENTER_ADMIN_ROLES, weekdays: WEEKDAYS, emailEnabled: mailer.enabled, resetByEmail: mailer.enabled && !!ctx.appUrl, demo: await isDemo(), needsSetup: await needsSetup(), sampleData: await hasSampleData(db) }),
   );
   // Scheduled sweep (Vercel Cron) that retries any notification emails left behind.
   api.get('/cron/emails', async (req, res) => {

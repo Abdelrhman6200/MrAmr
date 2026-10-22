@@ -10,7 +10,7 @@
 const NOW = "to_char(timezone('UTC', now()), 'YYYY-MM-DD HH24:MI:SS')";
 
 // Bump when the schema below changes; startup re-applies it once.
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -233,6 +233,12 @@ CREATE INDEX IF NOT EXISTS idx_login_failures ON login_failures(key, at);
 CREATE TABLE IF NOT EXISTS app_state (
   key TEXT PRIMARY KEY,
   value BIGINT NOT NULL DEFAULT 0
+);
+
+-- Rows created by "Load sample data", so they can be removed again.
+CREATE TABLE IF NOT EXISTS sample_rows (
+  tbl TEXT NOT NULL,
+  row_id INTEGER NOT NULL
 );
 
 -- Generated secrets (e.g. the key that signs sign-in sessions when AUTH_SECRET isn't set).

@@ -51,3 +51,48 @@ test('the generated session key is created once and shared', async () => {
   assert.equal(k1.length, 64);
   assert.equal(await storedSecret(db, 'auth'), k1);
 });
+
+test('the Head of Company can load sample data under their account and remove it again', async () => {
+  const boss = await post('/auth/login', { email: 'boss@x.io', password: 'longenough1' }).then((r) => (r.status === 200 ? r : null));
+  const owner = boss ?? (await post('/auth/login', { email: 'other@x.io', password: 'longenough2' }));
+  const auth = { authorization: `Bearer ${owner.body.token}`, 'content-type': 'application/json' };
+  const call = async (method, path, body) => {
+    const res = await fetch(base + path, { method, headers: auth, body: body ? JSON.stringify(body) : undefined });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+
+  // Some real work before and after loading the sample.
+  const real = (await call('POST', '/tasks', { title: 'Real task' })).body;
+  assert.equal((await call('POST', '/admin/sample')).status, 201);
+  assert.equal((await call('POST', '/admin/sample')).status, 409);
+  assert.equal((await (await fetch(`${base}/meta`)).json()).sampleData, true);
+
+  const users = (await call('GET', '/users')).body;
+  assert.equal(users.filter((u) => u.role === 'ceo').length, 1, 'the sample team reports to the real Head of Company');
+  const ops = users.find((u) => u.email === 'ops@taskflow.local');
+  assert.equal(ops.manager_id, owner.body.user.id);
+  // Sample accounts can't be signed into with the published demo password.
+  assert.equal((await post('/auth/login', { email: 'ops@taskflow.local', password: 'password123' })).status, 401);
+  assert.ok((await call('GET', '/tasks')).body.length > 20);
+  assert.ok((await call('GET', '/calls/lists')).body.lists.length >= 1);
+
+  // Real work that involves sample people.
+  const project = (await call('POST', '/projects', { name: 'Real project', member_ids: [ops.id] })).body;
+  const assigned = (await call('POST', '/tasks', { title: 'Real, for Lina', assignee_id: ops.id, project_id: project.id })).body;
+
+  const removed = await call('DELETE', '/admin/sample');
+  assert.equal(removed.status, 200);
+  assert.ok(removed.body.removed > 50);
+  const after = (await call('GET', '/users')).body;
+  assert.equal(after.length, 1);
+  const tasks = (await call('GET', '/tasks')).body.map((t) => t.title).sort();
+  assert.deepEqual(tasks, ['Real task', 'Real, for Lina'].sort());
+  assert.equal((await call('GET', `/tasks/${assigned.id}`)).body.assignee_id, null);
+  assert.equal((await call('GET', `/tasks/${real.id}`)).status, 200);
+  assert.equal((await call('GET', '/calls/lists')).body.lists.length, 0);
+  assert.equal((await call('GET', '/centers')).body.centers.length, 0);
+  assert.equal((await (await fetch(`${base}/meta`)).json()).sampleData, false);
+
+  // And it can be loaded again afterwards.
+  assert.equal((await call('POST', '/admin/sample')).status, 201);
+});

@@ -1,5 +1,6 @@
 // Demo organisation. Run `npm run seed` to wipe the database and reload it.
 import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 import { hashPassword } from './auth.js';
 import { bump, databaseUrl, openDb } from './db.js';
 import { localDate, nowUtc, utcAgo, DAY } from './time.js';
@@ -30,19 +31,29 @@ const PEOPLE = [
 const day = (offset) => localDate(offset);
 const daysAgoUtc = (n) => utcAgo(n * DAY);
 
-export async function seed(db) {
+// Loads the demo organisation. Every row it creates is listed in sample_rows so
+// removeSampleData() can take it out again.
+//
+// `ceo`: an existing Head of Company to build the sample team under (instead of
+// creating the demo one). The sample people then get random passwords nobody
+// knows, so a live site doesn't gain accounts with a published password.
+export async function seed(db, { ceo = null } = {}) {
   await db.tx(async (tx) => {
     // Statement helper: run(...params) resolves to { lastInsertRowid } like the old driver.
     const prepare = (sql) => ({
       run: async (...params) => {
         const row = await tx.get(/^\s*INSERT/i.test(sql) ? `${sql} RETURNING *` : sql, params);
+        const table = /^\s*INSERT INTO (\w+)/i.exec(sql)?.[1];
+        if (row?.id != null && table) await tx.run('INSERT INTO sample_rows (tbl, row_id) VALUES (?, ?)', [table, row.id]);
         return { lastInsertRowid: row?.id };
       },
     });
-    const hash = hashPassword(DEMO_PASSWORD);
+    const hash = hashPassword(ceo ? crypto.randomBytes(24).toString('base64url') : DEMO_PASSWORD);
     const ids = {};
+    if (ceo) ids.ceo = ceo.id;
     const insUser = prepare('INSERT INTO users (name, email, password_hash, role, title, manager_id, avatar_color) VALUES (?, ?, ?, ?, ?, ?, ?)');
     for (const [key, name, email, role, mgr, color] of PEOPLE) {
+      if (key === 'ceo' && ceo) continue;
       ids[key] = (await insUser.run(name, email, hash, role, null, mgr ? ids[mgr] : null, color)).lastInsertRowid;
     }
 
@@ -217,6 +228,58 @@ export async function seed(db) {
     // Sample notifications are history, not news: never email them.
     await tx.run('UPDATE notifications SET emailed = 1');
     await bump(tx, 'org');
+  });
+}
+
+// Tables in the order their sample rows can be deleted.
+const SAMPLE_TABLES = [
+  'notifications',
+  'activity',
+  'comments',
+  'checklist_items',
+  'call_logs',
+  'calls',
+  'call_lists',
+  'center_assignments',
+  'availability',
+  'availability_rounds',
+  'centers',
+  'tasks',
+  'projects',
+];
+
+export const hasSampleData = async (db) => !!(await db.get('SELECT 1 FROM sample_rows LIMIT 1'));
+
+// Removes everything "Load sample data" created. Real work that only touches
+// sample people survives: their tasks become unassigned, projects they owned
+// pass to `keeper` (the Head of Company removing the sample).
+export async function removeSampleData(db, keeper) {
+  return db.tx(async (tx) => {
+    const ids = async (table) => (await tx.all('SELECT row_id FROM sample_rows WHERE tbl = ?', [table])).map((r) => r.row_id);
+    const people = (await ids('users')).filter((id) => id !== keeper.id);
+    let removed = 0;
+    for (const table of SAMPLE_TABLES) {
+      removed += (await tx.run(`DELETE FROM ${table} WHERE id = ANY(?::int[])`, [await ids(table)])).rowCount;
+    }
+    // Anything real still pointing at a sample person.
+    await tx.run('UPDATE projects SET owner_id = ? WHERE owner_id = ANY(?::int[])', [keeper.id, people]);
+    await tx.run('UPDATE tasks SET reporter_id = ? WHERE reporter_id = ANY(?::int[])', [keeper.id, people]);
+    for (const [table, column] of [
+      ['comments', 'user_id'],
+      ['activity', 'user_id'],
+      ['call_logs', 'user_id'],
+      ['call_lists', 'created_by'],
+      ['availability_rounds', 'created_by'],
+    ]) {
+      await tx.run(`UPDATE ${table} SET ${column} = ? WHERE ${column} = ANY(?::int[])`, [keeper.id, people]);
+    }
+    await tx.run('UPDATE availability SET submitted_by = NULL WHERE submitted_by = ANY(?::int[])', [people]);
+    await tx.run('UPDATE center_assignments SET created_by = NULL WHERE created_by = ANY(?::int[])', [people]);
+    await tx.run('UPDATE password_resets SET created_by = NULL WHERE created_by = ANY(?::int[])', [people]);
+    removed += (await tx.run('DELETE FROM users WHERE id = ANY(?::int[])', [people])).rowCount;
+    await tx.run('DELETE FROM sample_rows');
+    await bump(tx, 'org');
+    return removed;
   });
 }
 

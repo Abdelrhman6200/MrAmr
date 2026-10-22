@@ -402,8 +402,27 @@ function UserForm({ editing, people, onClose, onSaved }) {
 }
 
 export default function Users() {
-  const { isUserAdmin, refresh, version, roleLabel, deptOf, userById, notify, user: me, t } = useApp();
+  const { isUserAdmin, refresh, version, roleLabel, deptOf, userById, notify, user: me, t, meta } = useApp();
   const [people, setPeople] = useState([]);
+  const [sample, setSample] = useState(!!meta.sampleData);
+  const [sampleBusy, setSampleBusy] = useState(false);
+
+  // Sample team, projects, tasks, calls and centers to try the app with; removable in one click.
+  const toggleSample = async () => {
+    if (sample && !confirm(t('sample.confirmRemove'))) return;
+    setSampleBusy(true);
+    try {
+      if (sample) await api.del('/admin/sample');
+      else await api.post('/admin/sample');
+      notify(t(sample ? 'sample.removed' : 'sample.loaded'), 'success');
+      setSample(!sample);
+      refresh();
+    } catch (e) {
+      notify(e.message, 'error');
+    } finally {
+      setSampleBusy(false);
+    }
+  };
   const [editing, setEditing] = useState(undefined);
   const [importing, setImporting] = useState(false);
   const [q, setQ] = useState('');
@@ -431,6 +450,11 @@ export default function Users() {
           >
             {t('users.backup')}
           </button>
+          {me.role === 'ceo' && (
+            <button className={sample ? 'btn danger' : 'btn'} disabled={sampleBusy} onClick={toggleSample}>
+              {sampleBusy ? '…' : t(sample ? 'sample.remove' : 'sample.load')}
+            </button>
+          )}
           <button className="btn" onClick={() => setImporting(true)}>
             {t('users.import')}
           </button>
