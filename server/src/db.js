@@ -293,6 +293,13 @@ function txHandle(query, depth) {
   };
 }
 
+// Errors that mean the connection itself is gone (not a problem with the query).
+function isDeadConnection(err) {
+  if (['57P01', '57P02', '57P03', '08000', '08003', '08006'].includes(err.code)) return true;
+  if (['ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'ECONNREFUSED'].includes(err.code)) return true;
+  return /Connection terminated|connection.*(closed|ended)|Client has encountered a connection error|socket hang up/i.test(err.message || '');
+}
+
 async function createPostgres(url) {
   const { default: pg } = await import('pg');
   // COUNT/SUM come back as int8/numeric strings by default; these values are small.
@@ -313,29 +320,65 @@ async function createPostgres(url) {
   for (const key of ['sslmode', 'ssl', 'sslrootcert', 'uselibpqcompat']) parsed.searchParams.delete(key);
   const pool = new pg.Pool({
     connectionString: parsed.toString(),
-    // Supabase requires TLS. Its pooler certificate isn't in Node's default store,
+    // Supabase/Neon require TLS. Their certificates aren't always in Node's default store,
     // so verify against DATABASE_CA when provided, otherwise encrypt without pinning.
     ssl: local ? false : process.env.DATABASE_CA ? { ca: process.env.DATABASE_CA } : { rejectUnauthorized: false },
-    // Serverless: few connections per instance; Supabase's pooler multiplexes them.
+    // Serverless: few connections per instance; the provider's pooler multiplexes them.
     max: Number(process.env.DATABASE_POOL_SIZE) || 3,
-    idleTimeoutMillis: 10_000,
+    idleTimeoutMillis: 5_000,
+    connectionTimeoutMillis: 15_000,
+    keepAlive: true,
   });
-  const ex = executor((sql, params) => pool.query(sql, params));
+  // A connection the database closed while idle (it sleeps when unused) must not
+  // crash the process; the pool drops it and opens a new one.
+  pool.on('error', (err) => console.warn('Idle database connection closed:', err.message));
+  // On Vercel, let idle connections close before the function is frozen.
+  try {
+    const { attachDatabasePool } = await import('@vercel/functions');
+    attachDatabasePool(pool);
+  } catch {
+    // Not on Vercel, or an older helper: nothing to do.
+  }
+
+  // Serverless instances are frozen between requests, so a pooled connection can
+  // already be dead when it's next used. Such a failure happens before the
+  // statement runs, so it is safe to retry once on a fresh connection.
+  const query = async (sql, params) => {
+    try {
+      return await pool.query(sql, params);
+    } catch (err) {
+      if (!isDeadConnection(err)) throw err;
+      return pool.query(sql, params);
+    }
+  };
+  const ex = executor(query);
+  const begin = async () => {
+    for (let attempt = 0; ; attempt++) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        return client;
+      } catch (err) {
+        client.release(err); // destroys it
+        if (attempt > 0 || !isDeadConnection(err)) throw err;
+      }
+    }
+  };
   return {
     kind: 'postgres',
     ...ex,
     async tx(fn) {
-      const client = await pool.connect();
+      const client = await begin();
+      let broken = null;
       try {
-        await client.query('BEGIN');
         const result = await fn(txHandle((sql, params) => client.query(sql, params), 0));
         await client.query('COMMIT');
         return result;
       } catch (err) {
-        await client.query('ROLLBACK').catch(() => {});
+        await client.query('ROLLBACK').catch((e) => (broken = e));
         throw err;
       } finally {
-        client.release();
+        client.release(broken || undefined);
       }
     },
     exec: (sql) => pool.query(sql),

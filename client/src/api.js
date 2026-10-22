@@ -57,7 +57,8 @@ async function request(method, path, body) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401 && path !== '/auth/login') onUnauthorized();
-    const ref = res.status >= 500 && data.details?.ref ? ` (${data.details.ref})` : '';
+    const why = res.status >= 500 ? [data.details?.ref, data.details?.message].filter(Boolean).join(': ') : '';
+    const ref = why ? ` (${why})` : '';
     throw new ApiError(res.status, translateMessage(data.error || res.statusText) + ref, data.code, data.details);
   }
   return data;

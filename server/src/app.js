@@ -90,13 +90,15 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
     app.get(/^(?!\/api).*/, (_req, res) => res.sendFile(path.join(staticDir, 'index.html')));
   }
 
-  app.use((err, _req, res, _next) => {
+  app.use((err, req, res, _next) => {
     const status = err.status || (err.type === 'entity.parse.failed' ? 400 : 500);
     if (status >= 500) console.error(err);
     if (status >= 500) {
-      // A database error code (e.g. 42P01) helps diagnose without revealing anything.
-      const ref = typeof err.code === 'string' && /^[0-9A-Z]{5}$/.test(err.code) ? err.code : undefined;
-      return res.status(status).json({ error: 'Internal server error', code: 'internal', details: { ref } });
+      // An error code (database or network) helps diagnose without revealing anything;
+      // the Head of Company also sees the underlying message.
+      const ref = typeof err.code === 'string' && /^([0-9A-Z]{5}|E[A-Z_]+)$/.test(err.code) ? err.code : undefined;
+      const message = req.user?.role === 'ceo' ? String(err.message || '').slice(0, 200) : undefined;
+      return res.status(status).json({ error: 'Internal server error', code: 'internal', details: { ref, message } });
     }
     res.status(status).json({ error: err.message, code: err.code, details: err.details });
   });

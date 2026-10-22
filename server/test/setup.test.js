@@ -96,3 +96,17 @@ test('the Head of Company can load sample data under their account and remove it
   // And it can be loaded again afterwards.
   assert.equal((await call('POST', '/admin/sample')).status, 201);
 });
+
+test('a locked-out admin can set a new password from the deployment settings', async () => {
+  const { bootstrap } = await import('../src/bootstrap.js');
+  const email = (await db.get("SELECT email FROM users WHERE role = 'ceo' LIMIT 1")).email;
+  // Without ADMIN_RESET nothing changes.
+  await bootstrap(db, { ADMIN_EMAIL: email, ADMIN_PASSWORD: 'recovered-pass-1' });
+  assert.equal((await post('/auth/login', { email, password: 'recovered-pass-1' })).status, 401);
+  await bootstrap(db, { ADMIN_RESET: '1', ADMIN_EMAIL: email, ADMIN_PASSWORD: 'recovered-pass-1' });
+  const ok = await post('/auth/login', { email, password: 'recovered-pass-1' });
+  assert.equal(ok.status, 200);
+  // Running again with the same settings keeps the new sign-in working.
+  await bootstrap(db, { ADMIN_RESET: '1', ADMIN_EMAIL: email, ADMIN_PASSWORD: 'recovered-pass-1' });
+  assert.equal((await fetch(`${base}/auth/me`, { headers: { authorization: `Bearer ${ok.body.token}` } })).status, 200);
+});
