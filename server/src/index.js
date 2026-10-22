@@ -28,5 +28,8 @@ const appUrl = process.env.APP_URL || null;
 if (mailer.enabled && !appUrl) console.warn('SMTP is configured but APP_URL is not: emails will have no links and password resets by email are off.');
 startNotificationEmails(db, mailer, appUrl?.replace(/\/+$/, ''));
 
-const app = createApp({ db, secret: loadSecret(), staticDir: STATIC_DIR, mailer, appUrl });
+// Web app hosted elsewhere (e.g. Vercel): comma-separated list of its addresses.
+const corsOrigins = (process.env.CORS_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
+
+const app = createApp({ db, secret: loadSecret(), staticDir: STATIC_DIR, mailer, appUrl, corsOrigins });
 app.listen(PORT, () => console.log(`TaskFlow API listening on http://localhost:${PORT}`));

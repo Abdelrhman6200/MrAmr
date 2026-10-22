@@ -121,10 +121,40 @@ client/src/
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | — | used only on the first start with an empty database. When set, the app creates this one Head of Company account and **no demo data**. When unset, it loads the demo company. |
 | `TZ` | system zone | time zone for "today", overdue and call-backs, e.g. `Africa/Cairo` |
 | `TRUST_PROXY` | — | set to `1` behind nginx/Caddy/a load balancer so login protection sees real client addresses |
+| `CORS_ORIGIN` | — | when the web app is hosted separately (e.g. on Vercel): its address(es), comma-separated. `*` matches one part of a domain, e.g. `https://taskflow-*.vercel.app` for preview deployments. |
+| `VITE_API_URL` | — | **web app build setting** (set in Vercel, not on the server): the API server's address, e.g. `https://taskflow-api.onrender.com` |
 | `APP_URL` | — | the public address, e.g. `https://tasks.yourcompany.com`. Used for links in emails. Email password resets only work when this is set. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `MAIL_FROM` | — | an email account to send from (Google Workspace, Microsoft 365, or any SMTP service). Without `SMTP_HOST` the app works but sends no email. |
 
 ## Deploying
+
+### Vercel (web app) + Render or Railway (server)
+
+Vercel can host the web app, but not the server: Vercel functions have no permanent disk, so the database would be wiped whenever Vercel recycles them. The server therefore runs on Render or Railway with a persistent disk, and the web app on Vercel talks to it.
+
+**1. Server on Render** (about $7/month: persistent disks need a paid instance)
+1. In Render: **New → Blueprint**, pick this repository. It reads `render.yaml` and creates the `taskflow-api` service with a 1 GB disk at `/app/data`.
+2. Fill in the values it asks for: `ADMIN_EMAIL`, `ADMIN_PASSWORD` (8+ characters, only used on the very first start), `ADMIN_NAME`, and for now put any placeholder in `CORS_ORIGIN` and `APP_URL`.
+3. After it deploys, note its address, e.g. `https://taskflow-api.onrender.com`. Opening `…/api/health` should show `{"ok":true}`.
+
+**…or on Railway** (usage-based, typically $5+/month)
+1. **New Project → Deploy from GitHub repo** → this repository. Railway uses the `Dockerfile` and `railway.json`.
+2. In the service: **Settings → Volumes → Add volume**, mount path `/app/data`.
+3. **Variables:** `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`, `AUTH_SECRET` (any long random string, e.g. from `openssl rand -hex 32`), `TZ=Africa/Cairo`, `TRUST_PROXY=1`.
+4. **Settings → Networking → Generate domain**, and note the address.
+
+Keep the server at **one instance**: the database lives on that instance's disk.
+
+**2. Web app on Vercel**
+1. **Add New → Project** → import this repository. Vercel reads `vercel.json`; leave the build settings as they are.
+2. **Settings → Environment Variables:** `VITE_API_URL` = the server address from step 1 (no trailing `/api`). Apply it to Production and Preview.
+3. Deploy, and note the site address, e.g. `https://taskflow.vercel.app`.
+
+**3. Connect them:** back on Render/Railway set `CORS_ORIGIN` to the Vercel address (add `,https://taskflow-*.vercel.app` to allow preview deployments) and `APP_URL` to the same Vercel address, then redeploy the server. Sign in on the Vercel address with your `ADMIN_EMAIL`.
+
+If you change `VITE_API_URL` later, redeploy on Vercel: it is built into the web app.
+
+### Docker on your own server
 
 With Docker on any Linux server:
 
@@ -133,7 +163,7 @@ cp .env.example .env      # fill in ADMIN_EMAIL, ADMIN_PASSWORD and AUTH_SECRET 
 docker compose up -d      # http://your-server:3001
 ```
 
-Data lives in the `taskflow-data` volume. Put the app behind HTTPS (for example with Caddy or nginx) before people sign in over the internet, and set `TRUST_PROXY=1` when you do.
+Data lives in the `taskflow-data` volume. The container starts as root only to make the data disk writable, then runs the app as the unprivileged `node` user. Put the app behind HTTPS (for example with Caddy or nginx) before people sign in over the internet, and set `TRUST_PROXY=1` when you do.
 
 Without Docker: install Node.js 22.13+, run `npm ci && npm run build`, then start it with the same environment variables (`ADMIN_EMAIL=… ADMIN_PASSWORD=… AUTH_SECRET=… TZ=Africa/Cairo npm start`) under a process manager such as systemd or pm2.
 

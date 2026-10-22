@@ -53,3 +53,30 @@ export function createLoginLimiter({ windowMs = 15 * 60 * 1000, maxPerAccount = 
     },
   };
 }
+
+// Lets a separately hosted web app (e.g. on Vercel) call this API.
+// `origins` is a list like ['https://tasks.example.com', 'https://taskflow-*.vercel.app'];
+// '*' matches a single DNS label, so 'https://*.vercel.app' cannot match 'evil.com/.vercel.app'.
+export function cors(origins) {
+  const patterns = origins.map((o) => {
+    const escaped = o.trim().replace(/\/+$/, '').replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[a-z0-9-]+');
+    return new RegExp(`^${escaped}$`, 'i');
+  });
+  return (req, res, next) => {
+    const origin = req.get('origin');
+    if (!origin || !patterns.some((re) => re.test(origin))) {
+      if (req.method === 'OPTIONS' && origin) return res.status(403).end();
+      return next();
+    }
+    res.set({
+      'Access-Control-Allow-Origin': origin,
+      Vary: 'Origin',
+      'Access-Control-Allow-Headers': 'authorization, content-type',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+      'Access-Control-Expose-Headers': 'Content-Disposition, Retry-After',
+      'Access-Control-Max-Age': '600',
+    });
+    if (req.method === 'OPTIONS') return res.status(204).end();
+    next();
+  };
+}

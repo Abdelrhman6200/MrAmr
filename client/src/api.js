@@ -1,5 +1,10 @@
 const TOKEN_KEY = 'taskflow.token';
 
+// Where the API lives. Empty means the same site (local dev, Docker). When the web app
+// is hosted separately (e.g. on Vercel), set VITE_API_URL at build time to the server's
+// address, like https://taskflow-api.up.railway.app
+const API_BASE = `${(import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')}/api`;
+
 export const getToken = () => {
   try {
     return localStorage.getItem(TOKEN_KEY);
@@ -32,7 +37,7 @@ export const setUnauthorizedHandler = (fn) => (onUnauthorized = fn);
 
 async function request(method, path, body) {
   const token = getToken();
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) },
     body: body ? JSON.stringify(body) : undefined,
@@ -54,7 +59,7 @@ const qs = (params = {}) => {
 // Downloads an authenticated file response (e.g. a backup) to the user's device.
 async function download(path, fallbackName) {
   const token = getToken();
-  const res = await fetch(`/api${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  const res = await fetch(`${API_BASE}${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new ApiError(res.status, translateMessage(data.error || res.statusText), data.code, data.details);

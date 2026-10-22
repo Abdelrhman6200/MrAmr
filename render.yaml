@@ -1,0 +1,32 @@
+# Render Blueprint: Dashboard → New → Blueprint → pick this repository.
+# Runs the API (and its SQLite database on a persistent disk). The web app itself is on Vercel.
+services:
+  - type: web
+    name: taskflow-api
+    runtime: docker
+    plan: starter # persistent disks need a paid instance
+    region: frankfurt # closest Render region to Egypt
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    numInstances: 1 # the database lives on this instance's disk: never run more than one
+    disk:
+      name: taskflow-data
+      mountPath: /app/data
+      sizeGB: 1
+    envVars:
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL # first start only: creates the Head of Company account
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_NAME
+        sync: false
+      - key: CORS_ORIGIN # your Vercel address, e.g. https://taskflow.vercel.app
+        sync: false
+      - key: APP_URL # same Vercel address; used for links in emails
+        sync: false
+      - key: TZ
+        value: Africa/Cairo
+      - key: TRUST_PROXY
+        value: "1"

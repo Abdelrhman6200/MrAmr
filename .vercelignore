@@ -1,0 +1,8 @@
+# Vercel only builds and serves the web app; the server runs on Railway/Render.
+data
+server
+Dockerfile
+docker-compose.yml
+docker-entrypoint.sh
+render.yaml
+railway.json

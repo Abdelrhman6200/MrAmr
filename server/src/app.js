@@ -14,10 +14,10 @@ import notificationRoutes from './routes/notifications.js';
 import callRoutes from './routes/calls.js';
 import centerRoutes from './routes/centers.js';
 import adminRoutes from './routes/admin.js';
-import { securityHeaders } from './security.js';
+import { cors, securityHeaders } from './security.js';
 import { createMailer } from './mail.js';
 
-export function createApp({ db, secret, staticDir, mailer = createMailer({}), appUrl = null }) {
+export function createApp({ db, secret, staticDir, mailer = createMailer({}), appUrl = null, corsOrigins = [] }) {
   const app = express();
   const access = makeAccess(db);
   // appUrl (APP_URL) is the public address used in emailed links; never derived from request headers.
@@ -27,6 +27,7 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
   if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
   app.disable('x-powered-by');
   app.use(securityHeaders);
+  if (corsOrigins.length) app.use('/api', cors(corsOrigins));
 
   // Large enough for a few thousand uploaded call-sheet rows.
   app.use(express.json({ limit: '10mb' }));
