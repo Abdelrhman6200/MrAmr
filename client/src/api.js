@@ -51,11 +51,14 @@ async function request(method, path, body) {
     throw unreachable();
   }
   if (res.status === 204) return null;
+  // Vercel answers a request that ran past its time limit with a plain-text 504.
+  if (res.status === 504) throw new ApiError(504, translateMessage('The server took too long to answer. Please try again.'), 'timeout');
   if (!(res.headers.get('content-type') || '').includes('application/json')) throw unreachable();
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401 && path !== '/auth/login') onUnauthorized();
-    throw new ApiError(res.status, translateMessage(data.error || res.statusText), data.code, data.details);
+    const ref = res.status >= 500 && data.details?.ref ? ` (${data.details.ref})` : '';
+    throw new ApiError(res.status, translateMessage(data.error || res.statusText) + ref, data.code, data.details);
   }
   return data;
 }

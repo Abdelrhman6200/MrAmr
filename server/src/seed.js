@@ -31,6 +31,24 @@ const PEOPLE = [
 const day = (offset) => localDate(offset);
 const daysAgoUtc = (n) => utcAgo(n * DAY);
 
+// Tables with a SERIAL id that the seed inserts into.
+const ID_TABLES = [
+  'users',
+  'projects',
+  'tasks',
+  'checklist_items',
+  'comments',
+  'activity',
+  'call_lists',
+  'calls',
+  'call_logs',
+  'centers',
+  'availability_rounds',
+  'availability',
+  'notifications',
+  'center_assignments',
+];
+
 // Loads the demo organisation. Every row it creates is listed in sample_rows so
 // removeSampleData() can take it out again.
 //
@@ -39,15 +57,54 @@ const daysAgoUtc = (n) => utcAgo(n * DAY);
 // knows, so a live site doesn't gain accounts with a published password.
 export async function seed(db, { ceo = null } = {}) {
   await db.tx(async (tx) => {
-    // Statement helper: run(...params) resolves to { lastInsertRowid } like the old driver.
+    // Rows are collected first and written in a few bulk statements at the end:
+    // a hosted database may be far away, and hundreds of one-row inserts would take
+    // longer than a serverless request may run. Ids are reserved up front, so later
+    // rows can refer to earlier ones before anything is written.
+    const reserved = {};
+    for (const r of await tx.all(
+      `SELECT t.tbl, nextval(pg_get_serial_sequence(t.tbl, 'id'))::int AS id
+       FROM unnest(?::text[]) AS t(tbl), generate_series(1, 120)`,
+      [ID_TABLES],
+    )) {
+      (reserved[r.tbl] ??= []).push(r.id);
+    }
+    const pending = new Map(); // statement -> list of parameter lists, in first-use order
+    const created = [];
     const prepare = (sql) => ({
       run: async (...params) => {
-        const row = await tx.get(/^\s*INSERT/i.test(sql) ? `${sql} RETURNING *` : sql, params);
-        const table = /^\s*INSERT INTO (\w+)/i.exec(sql)?.[1];
-        if (row?.id != null && table) await tx.run('INSERT INTO sample_rows (tbl, row_id) VALUES (?, ?)', [table, row.id]);
-        return { lastInsertRowid: row?.id };
+        const table = /^\s*INSERT INTO (\w+)/i.exec(sql)[1];
+        let id = null;
+        if (ID_TABLES.includes(table)) {
+          id = reserved[table].shift();
+          if (id == null) throw new Error(`Seed reserved too few ids for ${table}`);
+          params = [id, ...params];
+          created.push([table, id]);
+        }
+        if (!pending.has(sql)) pending.set(sql, { table, rows: [] });
+        pending.get(sql).rows.push(params);
+        return { lastInsertRowid: id };
       },
     });
+    const flush = async () => {
+      for (const [sql, { table, rows }] of pending) {
+        const at = sql.search(/\bVALUES\b/i);
+        let head = sql.slice(0, at);
+        let tuple = sql.slice(at + 6).trim();
+        const close = tuple.indexOf(')') + 1;
+        const rest = tuple.slice(close);
+        tuple = tuple.slice(0, close);
+        if (ID_TABLES.includes(table)) {
+          head = head.replace('(', '(id, ');
+          tuple = tuple.replace('(', '(?, ');
+        }
+        await tx.run(`${head} VALUES ${rows.map(() => tuple).join(', ')}${rest}`, rows.flat());
+      }
+      await tx.run('INSERT INTO sample_rows (tbl, row_id) SELECT * FROM unnest(?::text[], ?::int[])', [
+        created.map((c) => c[0]),
+        created.map((c) => c[1]),
+      ]);
+    };
     const hash = hashPassword(ceo ? crypto.randomBytes(24).toString('base64url') : DEMO_PASSWORD);
     const ids = {};
     if (ceo) ids.ceo = ceo.id;
@@ -245,6 +302,7 @@ export async function seed(db, { ceo = null } = {}) {
     await ceoNote.run(ids.ceo, 'review_requested', 'Lina Mansour requested your review on "Term 1 launch plan"', launchPlan, JSON.stringify({ actor: 'Lina Mansour', title: 'Term 1 launch plan' }));
     await ceoNote.run(ids.ceo, 'blocked', '"Fix audio sync on Lesson 1 intro" is blocked', null, JSON.stringify({ actor: 'Youssef Samir', title: 'Fix audio sync on Lesson 1 intro' }));
 
+    await flush();
     // Sample notifications are history, not news: never email them.
     await tx.run('UPDATE notifications SET emailed = 1');
     await bump(tx, 'org');
@@ -275,7 +333,8 @@ export const hasSampleData = async (db) => !!(await db.get('SELECT 1 FROM sample
 // pass to `keeper` (the Head of Company removing the sample).
 export async function removeSampleData(db, keeper) {
   return db.tx(async (tx) => {
-    const ids = async (table) => (await tx.all('SELECT row_id FROM sample_rows WHERE tbl = ?', [table])).map((r) => r.row_id);
+    const all = await tx.all('SELECT tbl, row_id FROM sample_rows');
+    const ids = async (table) => all.filter((r) => r.tbl === table).map((r) => r.row_id);
     const people = (await ids('users')).filter((id) => id !== keeper.id);
     let removed = 0;
     for (const table of SAMPLE_TABLES) {

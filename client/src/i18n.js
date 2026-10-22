@@ -1220,6 +1220,8 @@ const ar = {
 
 // Server error messages → Arabic. Unknown messages are shown as sent.
 const arErrors = {
+  'Internal server error': 'حدث خطأ في الخادم',
+  'The server took too long to answer. Please try again.': 'استغرق الخادم وقتًا طويلًا للرد. حاول مرة أخرى.',
   'Invalid email or password': 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
   'Not authenticated': 'يرجى تسجيل الدخول',
   'You do not have permission to do that': 'ليست لديك صلاحية لذلك',

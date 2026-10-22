@@ -93,7 +93,12 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
   app.use((err, _req, res, _next) => {
     const status = err.status || (err.type === 'entity.parse.failed' ? 400 : 500);
     if (status >= 500) console.error(err);
-    res.status(status).json({ error: status >= 500 ? 'Internal server error' : err.message, code: err.code, details: err.details });
+    if (status >= 500) {
+      // A database error code (e.g. 42P01) helps diagnose without revealing anything.
+      const ref = typeof err.code === 'string' && /^[0-9A-Z]{5}$/.test(err.code) ? err.code : undefined;
+      return res.status(status).json({ error: 'Internal server error', code: 'internal', details: { ref } });
+    }
+    res.status(status).json({ error: err.message, code: err.code, details: err.details });
   });
 
   return app;
