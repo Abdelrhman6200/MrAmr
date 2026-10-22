@@ -134,3 +134,34 @@ test('the sample loads by itself once, and stays removed after removal', async (
   assert.equal(await autoLoadSample(db, 'new.boss@x.io'), false);
   assert.equal(await hasSampleData(db), false);
 });
+
+test('an interrupted automatic load leaves nothing behind and is retried', async () => {
+  const { autoLoadSample, hasSampleData, removeSampleData, readStatus } = await import('../src/seed.js');
+  const ceo = await db.get("SELECT * FROM users WHERE role = 'ceo' ORDER BY id LIMIT 1");
+  if (await hasSampleData(db)) await removeSampleData(db, ceo);
+  await db.run("DELETE FROM app_state WHERE key = 'sample_auto'");
+  // Simulate the server being stopped part-way: the insert of the tasks fails.
+  await db.run("ALTER TABLE tasks ADD CONSTRAINT block_sample CHECK (title <> 'Q4 budget review')");
+  await assert.rejects(autoLoadSample(db, ceo.email));
+  assert.equal(await hasSampleData(db), false);
+  assert.match(await readStatus(db, 'sample'), /^failed/);
+  assert.equal((await db.get("SELECT COUNT(*) AS n FROM users WHERE email LIKE '%@taskflow.local'")).n, 0);
+  await db.run('ALTER TABLE tasks DROP CONSTRAINT block_sample');
+  // The next attempt (next start, or the Head of Company opening the dashboard) works.
+  assert.equal(await autoLoadSample(db, ceo.email), true);
+  assert.match(await readStatus(db, 'sample'), /^loaded under/);
+});
+
+test('a load the previous version marked done but never finished is retried', async () => {
+  const { autoLoadSample, hasSampleData, removeSampleData } = await import('../src/seed.js');
+  const ceo = await db.get("SELECT * FROM users WHERE role = 'ceo' ORDER BY id LIMIT 1");
+  if (await hasSampleData(db)) await removeSampleData(db, ceo);
+  // What the old code could leave: the mark set, no data, no outcome noted.
+  await db.run("INSERT INTO app_state (key, value) VALUES ('sample_auto', 1) ON CONFLICT (key) DO UPDATE SET value = 1");
+  await db.run("DELETE FROM app_secrets WHERE key = 'status:sample'");
+  assert.equal(await autoLoadSample(db, ceo.email), true);
+  assert.equal(await hasSampleData(db), true);
+  // After a removal it stays removed.
+  await removeSampleData(db, ceo);
+  assert.equal(await autoLoadSample(db, ceo.email), false);
+});

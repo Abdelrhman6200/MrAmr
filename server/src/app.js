@@ -17,6 +17,7 @@ import adminRoutes from './routes/admin.js';
 import { cors, securityHeaders } from './security.js';
 import { createMailer, emailDispatcher } from './mail.js';
 import { background } from './background.js';
+import { autoLoadSample, readStatus } from './seed.js';
 
 export function createApp({ db, secret, staticDir, mailer = createMailer({}), appUrl = null, corsOrigins = [], cronSecret = null, autoSample = false }) {
   const app = express();
@@ -61,7 +62,10 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
     const where = {};
     if (process.env.VERCEL_REGION) where.server_region = process.env.VERCEL_REGION;
     if (db.region) where.database_region = db.region;
-    res.json({ ok: true, ...where, ...(where.server_region ? { database_ms: Date.now() - start } : {}) });
+    const ms = where.server_region ? { database_ms: Date.now() - start } : {};
+    // Whether the template data loaded (and why not, if it didn't).
+    const sample = autoSample ? { sample_data: (await appState()).sample_data, sample_status: await readStatus(db, 'sample') } : {};
+    res.json({ ok: true, ...where, ...ms, ...sample });
   });
   api.get('/meta', async (_req, res) => {
     const state = await appState();
@@ -87,6 +91,19 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
   api.use('/users', userRoutes(ctx));
   api.use('/projects', projectRoutes(ctx));
   api.use('/tasks', taskRoutes(ctx));
+  // The template data normally loads when the server starts; if that didn't
+  // finish, the Head of Company opening the dashboard tries again (once per instance).
+  let sampleChecked = !autoSample;
+  api.use('/dashboard', async (req, _res, next) => {
+    if (sampleChecked || req.user.role !== 'ceo') return next();
+    try {
+      await autoLoadSample(db, req.user.email);
+      sampleChecked = true;
+    } catch (err) {
+      console.error('Loading the sample data failed:', err);
+    }
+    next();
+  });
   api.use('/dashboard', dashboardRoutes(ctx));
   api.use('/notifications', notificationRoutes(ctx));
   api.use('/calls', callRoutes(ctx));

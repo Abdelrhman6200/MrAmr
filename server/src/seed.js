@@ -332,7 +332,7 @@ export const hasSampleData = async (db) => !!(await db.get('SELECT 1 FROM sample
 // sample people survives: their tasks become unassigned, projects they owned
 // pass to `keeper` (the Head of Company removing the sample).
 export async function removeSampleData(db, keeper) {
-  return db.tx(async (tx) => {
+  const removed = await db.tx(async (tx) => {
     const all = await tx.all('SELECT tbl, row_id FROM sample_rows');
     const ids = async (table) => all.filter((r) => r.tbl === table).map((r) => r.row_id);
     const people = (await ids('users')).filter((id) => id !== keeper.id);
@@ -357,34 +357,64 @@ export async function removeSampleData(db, keeper) {
     await tx.run('UPDATE password_resets SET created_by = NULL WHERE created_by = ANY(?::int[])', [people]);
     removed += (await tx.run('DELETE FROM users WHERE id = ANY(?::int[])', [people])).rowCount;
     await tx.run('DELETE FROM sample_rows');
+    await bump(tx, 'sample_auto'); // never auto-load it again
     await bump(tx, 'org');
     return removed;
   });
+  await noteStatus(db, 'sample', `removed by ${keeper.email}`);
+  return removed;
 }
 
 // Loads the sample data automatically, once per database, under the Head of
 // Company (`preferEmail`'s account if that is one). Once it has run, it never runs
-// again, so removing the sample keeps it removed. Safe when instances race.
+// again, so removing the sample keeps it removed.
+//
+// The "done" mark and the data are written in one transaction: if the server is
+// stopped part-way (serverless platforms do that), neither is saved and the next
+// attempt starts over. The outcome is kept for /api/health.
 export async function autoLoadSample(db, preferEmail = null) {
-  if (await readCounter(db, 'sample_auto')) return false;
-  const ceo = await db.get(
-    "SELECT * FROM users WHERE role = 'ceo' AND active = 1 ORDER BY (email = ?) DESC, id LIMIT 1",
-    [String(preferEmail || '').trim().toLowerCase()],
-  );
-  if (!ceo) return false; // nobody to own it yet; try again on a later start
-  // Claim the one run; whoever bumps the counter to 1 does it.
-  if ((await bump(db, 'sample_auto')) !== 1) return false;
-  if (await hasSampleData(db)) return false;
-  if (await db.get("SELECT 1 FROM users WHERE email LIKE '%@taskflow.local' LIMIT 1")) return false;
+  if (await finished(db)) return false;
   try {
-    await seed(db, { ceo });
+    const loaded = await db.tx(async (tx) => {
+      await tx.run('SELECT pg_advisory_xact_lock(4245)'); // one instance at a time
+      if (await finished(tx)) return null;
+      const ceo = await tx.get(
+        "SELECT * FROM users WHERE role = 'ceo' AND active = 1 ORDER BY (email = ?) DESC, id LIMIT 1",
+        [String(preferEmail || '').trim().toLowerCase()],
+      );
+      if (!ceo) return null; // nobody to own it yet; try again later
+      if (await hasSampleData(tx)) return 'already loaded';
+      if (await tx.get("SELECT 1 FROM users WHERE email LIKE '%@taskflow.local' LIMIT 1")) return 'sample people already exist';
+      await seed(tx, { ceo });
+      await bump(tx, 'sample_auto');
+      return `loaded under ${ceo.email}`;
+    });
+    if (loaded) await noteStatus(db, 'sample', loaded);
+    if (loaded?.startsWith('loaded')) console.log(`Sample data ${loaded}.`);
+    return !!loaded?.startsWith('loaded');
   } catch (err) {
-    await db.run("UPDATE app_state SET value = 0 WHERE key = 'sample_auto'"); // try again next start
+    await noteStatus(db, 'sample', `failed: ${err.code ? `${err.code} ` : ''}${err.message}`).catch(() => {});
     throw err;
   }
-  console.log(`Loaded the sample data under ${ceo.email}.`);
-  return true;
 }
+
+// Done for good once it loaded or was removed. A mark with no outcome recorded
+// comes from an earlier version that could be stopped part-way: try again.
+async function finished(q) {
+  if (!(await readCounter(q, 'sample_auto'))) return false;
+  const status = await readStatus(q, 'sample');
+  return status != null && !status.startsWith('failed');
+}
+
+// Small status notes (kept alongside generated secrets; nothing here is secret).
+export async function noteStatus(db, what, text) {
+  await db.run(
+    'INSERT INTO app_secrets (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value',
+    [`status:${what}`, `${text.slice(0, 300)} (${nowUtc()} UTC)`],
+  );
+}
+
+export const readStatus = async (db, what) => (await db.get('SELECT value FROM app_secrets WHERE key = ?', [`status:${what}`]))?.value ?? null;
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { localDataDir } = await import('./config.js');

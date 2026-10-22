@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { HttpError, forbidden } from '../http.js';
 import { USER_ADMIN_ROLES } from '../meta.js';
-import { hasSampleData, removeSampleData, seed } from '../seed.js';
+import { hasSampleData, noteStatus, removeSampleData, seed } from '../seed.js';
 
 // Everything worth keeping, in an order that respects foreign keys when restoring.
 const BACKUP_TABLES = [
@@ -46,6 +46,7 @@ export default function adminRoutes({ db }) {
     const clash = await db.get("SELECT 1 FROM users WHERE email LIKE '%@taskflow.local' LIMIT 1");
     if (clash) throw new HttpError(409, 'Sample data is already loaded', 'sample_loaded');
     await seed(db, { ceo: req.user });
+    await noteStatus(db, 'sample', `loaded under ${req.user.email}`);
     res.status(201).json({ ok: true });
   });
 
