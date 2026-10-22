@@ -141,6 +141,8 @@ Everything runs inside one Vercel project: the web app, the API (a serverless fu
    On Vercel the sample data (below) loads by itself once, under your account; set `SAMPLE_DATA` = `0` to turn that off. You can also load it any time with **✨ Load sample data** on the Users page: it adds a sample team (reporting to you), projects, tasks, call lists and centers. **Remove sample data** takes it all out again and keeps your own work. Sample people can't sign in; reset one's password from Users if you want to see the app as that role.
 5. Optional: **Settings → Functions → Function Region**, choose the same region as the database to keep pages fast; and add `SMTP_*` variables for email.
 
+**Deployments marked "Blocked"?** On Vercel's free plan, a push only deploys when its commit is authored by someone on the Vercel account. Push a commit authored with your own email, or in Vercel use **Deployments → Create Deployment** and pick the branch.
+
 If something isn't set up, the site says what and how to fix it. `…/api/health` answers `{"ok":true}` when the API can reach the database.
 
 Already have a Postgres database elsewhere (Supabase, etc.)? Put its connection string in `DATABASE_URL` instead of step 2. For Supabase use the **Transaction pooler** string (port 6543).
