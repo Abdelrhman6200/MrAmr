@@ -7,9 +7,9 @@ import { seed } from './seed.js';
 // one Head of Company account (production); otherwise, where demo data is
 // allowed, it loads the demo organisation. Safe when several instances start at once.
 export async function bootstrap(db, env = process.env, { allowDemo = true } = {}) {
-  if ((await db.get('SELECT COUNT(*) AS n FROM users')).n > 0) {
+  if ((await db.get('SELECT COUNT(*) AS n FROM users')).n > 0 || env.ADMIN_RESET === '1') {
     await recoverAdmin(db, env);
-    return null;
+    if ((await db.get('SELECT COUNT(*) AS n FROM users')).n > 0) return null;
   }
   const { ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME } = env;
   if (ADMIN_EMAIL && ADMIN_PASSWORD) {
@@ -37,15 +37,26 @@ export async function bootstrap(db, env = process.env, { allowDemo = true } = {}
   return 'demo';
 }
 
-// Locked out with no email set up: set ADMIN_RESET=1 with ADMIN_EMAIL and ADMIN_PASSWORD,
+// Locked out with no email set up (or the account doesn't exist): set ADMIN_RESET=1 with ADMIN_EMAIL and ADMIN_PASSWORD,
 // redeploy, sign in with that password, then remove the three settings.
 // Only someone who can change the deployment's settings can do this.
 async function recoverAdmin(db, env) {
   const { ADMIN_RESET, ADMIN_EMAIL, ADMIN_PASSWORD } = env;
   if (ADMIN_RESET !== '1' || !ADMIN_EMAIL || !ADMIN_PASSWORD) return;
   if (ADMIN_PASSWORD.length < 8) throw new Error('ADMIN_PASSWORD must be at least 8 characters');
-  const user = await db.get('SELECT id, password_hash FROM users WHERE email = ?', [ADMIN_EMAIL.trim().toLowerCase()]);
-  if (!user) return console.warn(`ADMIN_RESET: no account with the email ${ADMIN_EMAIL}`);
+  const email = ADMIN_EMAIL.trim().toLowerCase();
+  const user = await db.get('SELECT id, password_hash FROM users WHERE email = ?', [email]);
+  if (!user) {
+    // No such account yet: create it as a Head of Company.
+    await db.tx(async (tx) => {
+      await tx.run(
+        "INSERT INTO users (name, email, password_hash, role, avatar_color) VALUES (?, ?, ?, 'ceo', '#15803d') ON CONFLICT (email) DO NOTHING",
+        [env.ADMIN_NAME || email.split('@')[0], email, hashPassword(ADMIN_PASSWORD)],
+      );
+      await bump(tx, 'org');
+    });
+    return console.log(`ADMIN_RESET: created the Head of Company account ${email}. Remove ADMIN_RESET from the settings now.`);
+  }
   // Already set: don't sign people out again on every start.
   if (verifyPassword(ADMIN_PASSWORD, user.password_hash)) return;
   await setPassword(db, user.id, ADMIN_PASSWORD);

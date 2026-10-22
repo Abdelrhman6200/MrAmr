@@ -110,3 +110,11 @@ test('a locked-out admin can set a new password from the deployment settings', a
   await bootstrap(db, { ADMIN_RESET: '1', ADMIN_EMAIL: email, ADMIN_PASSWORD: 'recovered-pass-1' });
   assert.equal((await fetch(`${base}/auth/me`, { headers: { authorization: `Bearer ${ok.body.token}` } })).status, 200);
 });
+
+test('ADMIN_RESET creates the account when it does not exist', async () => {
+  const { bootstrap } = await import('../src/bootstrap.js');
+  await bootstrap(db, { ADMIN_RESET: '1', ADMIN_EMAIL: 'New.Boss@x.io', ADMIN_PASSWORD: 'another-pass-1' });
+  const res = await post('/auth/login', { email: 'new.boss@x.io', password: 'another-pass-1' });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.user.role, 'ceo');
+});

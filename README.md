@@ -147,7 +147,7 @@ Already have a Postgres database elsewhere (Supabase, etc.)? Put its connection 
 
 **Backups:** the database keeps its own restore history (see the database's page under Storage). Any time, the Head of Company or Operations Manager can also click **Download backup** on the Users page for a JSON copy of every table.
 
-**Locked out?** If the Head of Company forgets their password and email isn't set up: in Vercel add `ADMIN_RESET` = `1`, `ADMIN_EMAIL` = the account's email and `ADMIN_PASSWORD` = a new password (8+ characters), redeploy, sign in with the new password, then delete those three settings.
+**Locked out, or need an account created?** In Vercel add `ADMIN_RESET` = `1`, `ADMIN_EMAIL` = the account's email and `ADMIN_PASSWORD` = a new password (8+ characters), redeploy, sign in with the new password, then delete those three settings. If no account has that email, it is created as a Head of Company.
 
 **Passwords:** people can click **Forgot password?** on the sign-in page to get a one-hour reset link by email, once `SMTP_*` is set. Without email, the Head of Company or Operations Manager opens the person in **Users → Edit → Create password reset link** and sends that link privately (for example on WhatsApp). It works once and lasts 72 hours. Resetting or changing a password signs that person out everywhere else.
 
