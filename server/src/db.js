@@ -323,8 +323,9 @@ async function createPostgres(url) {
     // Supabase/Neon require TLS. Their certificates aren't always in Node's default store,
     // so verify against DATABASE_CA when provided, otherwise encrypt without pinning.
     ssl: local ? false : process.env.DATABASE_CA ? { ca: process.env.DATABASE_CA } : { rejectUnauthorized: false },
-    // Serverless: few connections per instance; the provider's pooler multiplexes them.
-    max: Number(process.env.DATABASE_POOL_SIZE) || 3,
+    // Enough for one page's parallel requests to run side by side; the provider's
+    // pooler (Neon, Supabase) multiplexes them onto few real connections.
+    max: Number(process.env.DATABASE_POOL_SIZE) || 10,
     idleTimeoutMillis: 5_000,
     connectionTimeoutMillis: 15_000,
     keepAlive: true,
@@ -366,6 +367,9 @@ async function createPostgres(url) {
   };
   return {
     kind: 'postgres',
+    // Cloud region from the host name, e.g. ep-x-pooler.eu-central-1.aws.neon.tech
+    // or aws-0-eu-central-1.pooler.supabase.com → eu-central-1.
+    region: /\b((?:us|eu|ap|sa|ca|me|af|il|mx)-(?:east|west|central|north|south)(?:east|west)?-\d)\b/.exec(parsed.hostname)?.[1] ?? null,
     ...ex,
     async tx(fn) {
       const client = await begin();
@@ -468,6 +472,11 @@ export async function readCounter(q, key) {
 // A random secret generated once and shared by every server instance.
 export async function storedSecret(db, key) {
   const { randomBytes } = await import('node:crypto');
-  await db.run('INSERT INTO app_secrets (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING', [key, randomBytes(32).toString('hex')]);
-  return (await db.get('SELECT value FROM app_secrets WHERE key = ?', [key])).value;
+  // One round trip: insert if missing, and return whichever value is stored.
+  const row = await db.get(
+    `INSERT INTO app_secrets (key, value) VALUES (?, ?)
+     ON CONFLICT (key) DO UPDATE SET value = app_secrets.value RETURNING value`,
+    [key, randomBytes(32).toString('hex')],
+  );
+  return row.value;
 }

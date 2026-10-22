@@ -63,9 +63,18 @@ export function AppProvider({ children }) {
     setBooting(true);
     setBootError(null);
     try {
-      setMeta(await api.get('/meta'));
-      if (getToken()) {
-        const me = (await api.get('/auth/me')).user;
+      // Both at once: each is a round trip to the server.
+      // An expired sign-in (401) just means showing the sign-in page.
+      const mePromise = getToken()
+        ? api.get('/auth/me').catch((err) => {
+            if (err.status === 401) return setToken(null);
+            throw err;
+          })
+        : null;
+      const [m, session] = await Promise.all([api.get('/meta'), mePromise]);
+      setMeta(m);
+      if (session) {
+        const me = session.user;
         adoptUserLang(me);
         setUser(me);
       }

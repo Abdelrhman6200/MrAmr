@@ -17,7 +17,6 @@ import adminRoutes from './routes/admin.js';
 import { cors, securityHeaders } from './security.js';
 import { createMailer, emailDispatcher } from './mail.js';
 import { background } from './background.js';
-import { hasSampleData } from './seed.js';
 
 export function createApp({ db, secret, staticDir, mailer = createMailer({}), appUrl = null, corsOrigins = [], cronSecret = null, autoSample = false }) {
   const app = express();
@@ -45,18 +44,29 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
   }
 
   // The login page only offers demo accounts while the demo company is loaded.
-  const isDemo = async () => !!(await db.get("SELECT 1 FROM users WHERE email = 'ceo@taskflow.local' AND active = 1"));
-  // Until the first account exists, the web app shows a set-up form instead of sign-in.
-  const needsSetup = async () => !(await db.get('SELECT 1 FROM users LIMIT 1'));
+  // demo: the login page offers demo accounts. needsSetup: until the first account
+  // exists, the web app shows a set-up form instead of sign-in. One round trip.
+  const appState = () =>
+    db.get(`SELECT
+      EXISTS (SELECT 1 FROM users WHERE email = 'ceo@taskflow.local' AND active = 1) AS demo,
+      NOT EXISTS (SELECT 1 FROM users) AS needs_setup,
+      EXISTS (SELECT 1 FROM sample_rows) AS sample_data`);
 
   const api = express.Router();
+  // Also says where the server and the database run: if they're far apart, every
+  // page waits on long round trips (fix: Vercel → Settings → Functions → region).
   api.get('/health', async (_req, res) => {
+    const start = Date.now();
     await db.get('SELECT 1');
-    res.json({ ok: true });
+    const where = {};
+    if (process.env.VERCEL_REGION) where.server_region = process.env.VERCEL_REGION;
+    if (db.region) where.database_region = db.region;
+    res.json({ ok: true, ...where, ...(where.server_region ? { database_ms: Date.now() - start } : {}) });
   });
-  api.get('/meta', async (_req, res) =>
-    res.json({ departments: DEPARTMENTS, roles: ROLES, statuses: STATUSES, priorities: PRIORITIES, taskTypes: TASK_TYPES, projectStatuses: PROJECT_STATUSES, userAdminRoles: USER_ADMIN_ROLES, callStatuses: CALL_STATUSES, centerAdminRoles: CENTER_ADMIN_ROLES, weekdays: WEEKDAYS, emailEnabled: mailer.enabled, resetByEmail: mailer.enabled && !!ctx.appUrl, demo: await isDemo(), needsSetup: await needsSetup(), sampleData: await hasSampleData(db) }),
-  );
+  api.get('/meta', async (_req, res) => {
+    const state = await appState();
+    res.json({ departments: DEPARTMENTS, roles: ROLES, statuses: STATUSES, priorities: PRIORITIES, taskTypes: TASK_TYPES, projectStatuses: PROJECT_STATUSES, userAdminRoles: USER_ADMIN_ROLES, callStatuses: CALL_STATUSES, centerAdminRoles: CENTER_ADMIN_ROLES, weekdays: WEEKDAYS, emailEnabled: mailer.enabled, resetByEmail: mailer.enabled && !!ctx.appUrl, demo: state.demo, needsSetup: state.needs_setup, sampleData: state.sample_data });
+  });
   // Scheduled sweep (Vercel Cron) that retries any notification emails left behind.
   api.get('/cron/emails', async (req, res) => {
     if (!cronSecret || req.get('authorization') !== `Bearer ${cronSecret}`) throw new HttpError(401, 'Not authenticated');
@@ -66,9 +76,9 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
   api.use('/auth', authRoutes(ctx));
   api.use(requireAuth(db, secret));
   // Refresh the cached org chart if another instance changed it.
-  api.use(async (_req, _res, next) => {
+  api.use(async (req, _res, next) => {
     try {
-      await access.sync();
+      await access.sync(req.orgVersion);
       next();
     } catch (err) {
       next(err);

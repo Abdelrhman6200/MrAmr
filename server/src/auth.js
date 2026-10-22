@@ -45,9 +45,17 @@ export function requireAuth(db, secret) {
       const header = req.get('authorization') || '';
       const token = header.startsWith('Bearer ') ? header.slice(7) : null;
       const data = token && verifyToken(token, secret);
-      const user = data && (await db.get('SELECT * FROM users WHERE id = ? AND active = 1', [data.sub]));
-      if (!user || (data.v ?? 0) !== (user.session_version ?? 0)) return next(new HttpError(401, 'Not authenticated'));
+      // The org-chart version comes along so permission checks need no extra round trip.
+      const row =
+        data &&
+        Number.isInteger(data.sub) &&
+        (await db.get("SELECT u.*, (SELECT value FROM app_state WHERE key = 'org') AS org_version FROM users u WHERE u.id = ? AND u.active = 1", [
+          data.sub,
+        ]));
+      if (!row || (data.v ?? 0) !== (row.session_version ?? 0)) return next(new HttpError(401, 'Not authenticated'));
+      const { org_version, ...user } = row;
       req.user = user;
+      req.orgVersion = Number(org_version ?? 0);
       next();
     } catch (err) {
       next(err);

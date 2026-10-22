@@ -18,8 +18,9 @@ export function makeAccess(db) {
   let org = null;
   let orgVersion = -1;
 
-  async function sync() {
-    const version = await readCounter(db, 'org');
+  // `known`: the current version if the caller already read it (saves a round trip).
+  async function sync(known) {
+    const version = known ?? (await readCounter(db, 'org'));
     if (org && version === orgVersion) return;
     const rows = await db.all('SELECT id, manager_id, role, active FROM users');
     const children = new Map();

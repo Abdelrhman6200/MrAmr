@@ -45,7 +45,7 @@ test('with a database it serves the API at the rewritten path', { skip: !process
   const base = await serve(t, handler);
   const health = await fetch(`${base}/api/index?__path=health`);
   assert.equal(health.status, 200);
-  assert.deepEqual(await health.json(), { ok: true });
+  assert.equal((await health.json()).ok, true);
   const meta = await fetch(`${base}/api/index?__path=meta&x=1`);
   assert.equal(meta.status, 200);
   const m = await meta.json();
