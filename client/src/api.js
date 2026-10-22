@@ -1,8 +1,7 @@
 const TOKEN_KEY = 'taskflow.token';
 
-// Where the API lives. Empty means the same site (local dev, Docker). When the web app
-// is hosted separately (e.g. on Vercel), set VITE_API_URL at build time to the server's
-// address, like https://taskflow-api.up.railway.app
+// Where the API lives: the same site by default (on Vercel it's the api/ function).
+// Only if the API is hosted elsewhere, set VITE_API_URL at build time to its address.
 export const API_BASE = `${(import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')}/api`;
 
 export const getToken = () => {

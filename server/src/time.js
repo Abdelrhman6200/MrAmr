@@ -1,10 +1,45 @@
-// One format for every timestamp the server records: UTC 'YYYY-MM-DD HH:MM:SS',
-// identical to SQLite's datetime('now'), so SQL comparisons are plain string compares.
-export const nowUtc = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
+// All timestamps the server records are UTC text 'YYYY-MM-DD HH:MM:SS', so SQL can
+// compare them as plain strings. Local-time values (today's date, call-back times)
+// use APP_TIMEZONE — hosts like Vercel always run in UTC, so we can't rely on TZ.
+export const APP_TIMEZONE = process.env.APP_TIMEZONE || process.env.TZ || 'Africa/Cairo';
 
-// Call-back times are local wall-clock 'YYYY-MM-DDTHH:MM' (what the person picked);
-// compare them against local "now" in the same shape.
-export const SQL_LOCAL_NOW_MINUTE = "strftime('%Y-%m-%dT%H:%M', 'now', 'localtime')";
+const utc = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
 
-// Start of today in local time, expressed in UTC for comparing with stored timestamps.
-export const SQL_LOCAL_TODAY_START = "datetime('now', 'localtime', 'start of day', 'utc')";
+export const nowUtc = () => utc(Date.now());
+export const utcAgo = (ms) => utc(Date.now() - ms);
+export const DAY = 864e5;
+
+// Wall-clock parts of `ms` in the app's time zone.
+function localParts(ms = Date.now()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(ms));
+  return Object.fromEntries(parts.map((p) => [p.type, p.value]));
+}
+
+// 'YYYY-MM-DD' of today (+ offset days) in the app's time zone.
+export function localDate(offsetDays = 0) {
+  const p = localParts(Date.now() + offsetDays * DAY);
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+// Local 'YYYY-MM-DDTHH:MM', the shape call-back times are stored in.
+export function localNowMinute() {
+  const p = localParts();
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+}
+
+// The UTC timestamp of local midnight today, for "since the start of today" queries.
+export function localTodayStartUtc() {
+  const now = Date.now();
+  const p = localParts(now);
+  const sinceMidnight = (Number(p.hour) * 3600 + Number(p.minute) * 60 + Number(p.second)) * 1000 + (now % 1000);
+  return utc(now - sinceMidnight);
+}

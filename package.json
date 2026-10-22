@@ -6,19 +6,22 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n api,web -c blue,magenta \"npm:dev:api\" \"npm:dev:web\"",
-    "dev:api": "node --no-warnings=ExperimentalWarning --watch server/src/index.js",
+    "dev:api": "node --env-file-if-exists=.env --watch server/src/index.js",
     "dev:web": "vite",
     "build": "vite build",
-    "start": "node --no-warnings=ExperimentalWarning server/src/index.js",
-    "seed": "node --no-warnings=ExperimentalWarning server/src/seed.js --reset",
-    "test": "node --no-warnings=ExperimentalWarning --test server/test/*.test.js"
+    "start": "node --env-file-if-exists=.env server/src/index.js",
+    "seed": "node --env-file-if-exists=.env server/src/seed.js --reset",
+    "test": "node --test server/test/*.test.js"
   },
   "engines": {
-    "node": ">=22.13"
+    "node": ">=22.9"
   },
   "dependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@vercel/functions": "3.9.9",
     "express": "^5.3.0",
     "nodemailer": "10.0.12",
+    "pg": "8.23.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.6",

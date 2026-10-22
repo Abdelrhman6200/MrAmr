@@ -1,8 +1,8 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
-import { openDb } from '../src/db.js';
-import { seed, DEMO_PASSWORD } from '../src/seed.js';
+import { testDb } from './helpers.js';
+import { DEMO_PASSWORD } from '../src/seed.js';
 
 let server;
 let base;
@@ -22,8 +22,7 @@ async function api(who, method, path, body) {
 const EMAILS = { cs: 'cs.head@taskflow.local', cs1: 'support1@taskflow.local', cs2: 'support2@taskflow.local', ins1: 'instructor1@taskflow.local', ceo: 'ceo@taskflow.local' };
 
 before(async () => {
-  const db = openDb(':memory:');
-  seed(db);
+  const db = await testDb();
   server = createApp({ db, secret: 'test' }).listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}`;

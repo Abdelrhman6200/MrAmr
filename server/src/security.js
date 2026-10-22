@@ -21,35 +21,35 @@ export function securityHeaders(_req, res, next) {
   next();
 }
 
-// Counts failed logins per (ip, email) and per ip within a sliding window.
-export function createLoginLimiter({ windowMs = 15 * 60 * 1000, maxPerAccount = 8, maxPerIp = 40 } = {}) {
-  const failures = new Map();
-  const recent = (key, now) => {
-    const list = (failures.get(key) || []).filter((t) => now - t < windowMs);
-    if (list.length) failures.set(key, list);
-    else failures.delete(key);
-    return list;
-  };
-  const keys = (ip, email) => [`ip:${ip}`, `acct:${ip}:${String(email || '').toLowerCase()}`];
+// Counts failed attempts per (ip, email) and per ip within a sliding window. Stored in
+// the database so the limit holds across every server instance. `namespace` keeps
+// separate limits apart (e.g. sign-in vs. password-reset requests).
+export function createLoginLimiter(db, { namespace = 'login', windowMs = 15 * 60 * 1000, maxPerAccount = 8, maxPerIp = 40 } = {}) {
+  const keys = (ip, email) => [`${namespace}:ip:${ip}`, `${namespace}:acct:${ip}:${String(email || '').trim().toLowerCase()}`];
 
   return {
     // Seconds until the caller may retry, or 0 if allowed.
-    retryAfter(ip, email, now = Date.now()) {
+    async retryAfter(ip, email, now = Date.now()) {
       const [ipKey, acctKey] = keys(ip, email);
-      const checks = [
-        [recent(ipKey, now), maxPerIp],
-        [recent(acctKey, now), maxPerAccount],
-      ];
+      const rows = await db.all(
+        'SELECT key, COUNT(*)::int AS n, MIN(at) AS first FROM login_failures WHERE key = ANY(?::text[]) AND at > ? GROUP BY key',
+        [[ipKey, acctKey], now - windowMs],
+      );
       let wait = 0;
-      for (const [list, max] of checks) if (list.length >= max) wait = Math.max(wait, Math.ceil((list[0] + windowMs - now) / 1000));
+      for (const r of rows) {
+        const max = r.key === ipKey ? maxPerIp : maxPerAccount;
+        if (r.n >= max) wait = Math.max(wait, Math.ceil((Number(r.first) + windowMs - now) / 1000));
+      }
       return wait;
     },
-    fail(ip, email, now = Date.now()) {
-      for (const key of keys(ip, email)) failures.set(key, [...recent(key, now), now]);
-      if (failures.size > 10000) failures.clear(); // memory guard under attack
+    async fail(ip, email, now = Date.now()) {
+      const [ipKey, acctKey] = keys(ip, email);
+      await db.run('INSERT INTO login_failures (key, at) VALUES (?, ?), (?, ?)', [ipKey, now, acctKey, now]);
+      // Housekeeping: forget attempts that can no longer count.
+      if (Math.random() < 0.05) await db.run('DELETE FROM login_failures WHERE at < ?', [now - windowMs]);
     },
-    succeed(ip, email) {
-      failures.delete(keys(ip, email)[1]);
+    async succeed(ip, email) {
+      await db.run('DELETE FROM login_failures WHERE key = ?', [keys(ip, email)[1]]);
     },
   };
 }

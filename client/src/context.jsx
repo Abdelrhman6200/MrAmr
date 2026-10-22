@@ -72,7 +72,7 @@ export function AppProvider({ children }) {
     } catch (err) {
       // Only a rejected login clears it; a network blip must not sign people out.
       if (err.status === 401) setToken(null);
-      else setBootError(err.code === 'server_unreachable' ? 'server_unreachable' : 'unknown');
+      else setBootError({ code: err.code || 'unknown', reason: err.details?.reason });
     } finally {
       setBooting(false);
     }

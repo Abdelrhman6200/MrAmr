@@ -40,15 +40,18 @@ export function verifyToken(token, secret) {
 }
 
 export function requireAuth(db, secret) {
-  const findUser = db.prepare('SELECT * FROM users WHERE id = ? AND active = 1');
-  return (req, _res, next) => {
-    const header = req.get('authorization') || '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-    const data = token && verifyToken(token, secret);
-    const user = data && findUser.get(data.sub);
-    if (!user || (data.v ?? 0) !== (user.session_version ?? 0)) return next(new HttpError(401, 'Not authenticated'));
-    req.user = user;
-    next();
+  return async (req, _res, next) => {
+    try {
+      const header = req.get('authorization') || '';
+      const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+      const data = token && verifyToken(token, secret);
+      const user = data && (await db.get('SELECT * FROM users WHERE id = ? AND active = 1', [data.sub]));
+      if (!user || (data.v ?? 0) !== (user.session_version ?? 0)) return next(new HttpError(401, 'Not authenticated'));
+      req.user = user;
+      next();
+    } catch (err) {
+      next(err);
+    }
   };
 }
 

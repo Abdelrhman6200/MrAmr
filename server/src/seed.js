@@ -1,9 +1,8 @@
 // Demo organisation. Run `npm run seed` to wipe the database and reload it.
-import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { hashPassword } from './auth.js';
-import { openDb, transaction } from './db.js';
-import { nowUtc } from './time.js';
+import { bump, openDb } from './db.js';
+import { localDate, nowUtc, utcAgo, DAY } from './time.js';
 
 export const DEMO_PASSWORD = 'password123';
 
@@ -27,47 +26,49 @@ const PEOPLE = [
   ['po', 'Ahmed Zaki', 'product@taskflow.local', 'product_owner', 'ceo', '#22c55e'],
 ];
 
-// A calendar date `offset` days from today, in local time.
-const day = (offset) => {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-const daysAgoUtc = (n) => new Date(Date.now() - n * 864e5).toISOString().replace('T', ' ').slice(0, 19);
+// A calendar date `offset` days from today, in the app's time zone.
+const day = (offset) => localDate(offset);
+const daysAgoUtc = (n) => utcAgo(n * DAY);
 
-export function seed(db) {
-  transaction(db, () => {
+export async function seed(db) {
+  await db.tx(async (tx) => {
+    // Statement helper: run(...params) resolves to { lastInsertRowid } like the old driver.
+    const prepare = (sql) => ({
+      run: async (...params) => {
+        const row = await tx.get(/^\s*INSERT/i.test(sql) ? `${sql} RETURNING *` : sql, params);
+        return { lastInsertRowid: row?.id };
+      },
+    });
     const hash = hashPassword(DEMO_PASSWORD);
     const ids = {};
-    const insUser = db.prepare('INSERT INTO users (name, email, password_hash, role, title, manager_id, avatar_color) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    const insUser = prepare('INSERT INTO users (name, email, password_hash, role, title, manager_id, avatar_color) VALUES (?, ?, ?, ?, ?, ?, ?)');
     for (const [key, name, email, role, mgr, color] of PEOPLE) {
-      ids[key] = Number(insUser.run(name, email, hash, role, null, mgr ? ids[mgr] : null, color).lastInsertRowid);
+      ids[key] = (await insUser.run(name, email, hash, role, null, mgr ? ids[mgr] : null, color)).lastInsertRowid;
     }
 
-    const insProject = db.prepare('INSERT INTO projects (name, description, department, owner_id, status, start_date, due_date, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-    const insMember = db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)');
-    const project = (name, desc, dept, owner, members, color, due, status = 'active') => {
-      const id = Number(insProject.run(name, desc, dept, ids[owner], status, day(-20), day(due), color).lastInsertRowid);
-      for (const m of [owner, ...members]) insMember.run(id, ids[m]);
+    const insProject = prepare('INSERT INTO projects (name, description, department, owner_id, status, start_date, due_date, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const insMember = prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING');
+    const project = async (name, desc, dept, owner, members, color, due, status = 'active') => {
+      const id = (await insProject.run(name, desc, dept, ids[owner], status, day(-20), day(due), color)).lastInsertRowid;
+      for (const m of [owner, ...members]) await insMember.run(id, ids[m]);
       return id;
     };
 
-    const physics = project('Physics 101 — Term 1 Course', 'Record, edit and QA all Term 1 physics lessons before launch.', 'content', 'hoc', ['ins1', 'ins2', 'ins3', 'cq'], '#8b5cf6', 25);
-    const campaign = project('Back-to-School Campaign', 'Multi-channel enrollment campaign for the new term.', 'marketing', 'mkt', ['mkt1', 'mkt2', 'ins1'], '#f97316', 14);
-    const release = project('Platform v2.4 Release', 'New quiz engine, video player fixes and student dashboard.', 'product', 'po', ['sys', 'qc', 'cs'], '#22c55e', 30);
-    const support = project('Support Backlog Cleanup', 'Clear the backlog of open student tickets and update the FAQ.', 'customer_service', 'cs', ['cs1', 'cs2'], '#ec4899', 10);
-    const audit = project('Q4 Content Quality Audit', 'Audit published lessons against the quality checklist.', 'systems_ops', 'sys', ['cq', 'qc', 'hoc'], '#14b8a6', 40, 'planning');
+    const physics = await project('Physics 101 — Term 1 Course', 'Record, edit and QA all Term 1 physics lessons before launch.', 'content', 'hoc', ['ins1', 'ins2', 'ins3', 'cq'], '#8b5cf6', 25);
+    const campaign = await project('Back-to-School Campaign', 'Multi-channel enrollment campaign for the new term.', 'marketing', 'mkt', ['mkt1', 'mkt2', 'ins1'], '#f97316', 14);
+    const release = await project('Platform v2.4 Release', 'New quiz engine, video player fixes and student dashboard.', 'product', 'po', ['sys', 'qc', 'cs'], '#22c55e', 30);
+    const support = await project('Support Backlog Cleanup', 'Clear the backlog of open student tickets and update the FAQ.', 'customer_service', 'cs', ['cs1', 'cs2'], '#ec4899', 10);
+    const audit = await project('Q4 Content Quality Audit', 'Audit published lessons against the quality checklist.', 'systems_ops', 'sys', ['cq', 'qc', 'hoc'], '#14b8a6', 40, 'planning');
 
-    const insTask = db.prepare(
+    const insTask = prepare(
       `INSERT INTO tasks (project_id, title, description, type, status, priority, assignee_id, reporter_id, reviewer_id, due_date, estimate_hours, tags, completed_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
-    const insCheck = db.prepare('INSERT INTO checklist_items (task_id, text, done, position) VALUES (?, ?, ?, ?)');
-    const insComment = db.prepare('INSERT INTO comments (task_id, user_id, body) VALUES (?, ?, ?)');
-    const insActivity = db.prepare('INSERT INTO activity (task_id, project_id, user_id, action, detail) VALUES (?, ?, ?, ?, ?)');
-    const task = (p, title, type, status, priority, assignee, reporter, due, opts = {}) => {
-      const id = Number(
-        insTask.run(
+    const insCheck = prepare('INSERT INTO checklist_items (task_id, text, done, position) VALUES (?, ?, ?, ?)');
+    const insComment = prepare('INSERT INTO comments (task_id, user_id, body) VALUES (?, ?, ?)');
+    const insActivity = prepare('INSERT INTO activity (task_id, project_id, user_id, action, detail) VALUES (?, ?, ?, ?, ?)');
+    const task = async (p, title, type, status, priority, assignee, reporter, due, opts = {}) => {
+      const { lastInsertRowid: id } = await insTask.run(
           p,
           title,
           opts.desc || '',
@@ -81,17 +82,16 @@ export function seed(db) {
           opts.est ?? null,
           opts.tags || '',
           status === 'done' ? daysAgoUtc(opts.doneAgo ?? 2) : null,
-        ).lastInsertRowid,
       );
-      insActivity.run(id, p, ids[reporter], 'created', title);
-      (opts.checklist || []).forEach(([text, done], i) => insCheck.run(id, text, done ? 1 : 0, i));
-      (opts.comments || []).forEach(([who, body]) => insComment.run(id, ids[who], body));
+      await insActivity.run(id, p, ids[reporter], 'created', title);
+      for (const [i, [text, done]] of (opts.checklist || []).entries()) await insCheck.run(id, text, done ? 1 : 0, i);
+      for (const [who, body] of opts.comments || []) await insComment.run(id, ids[who], body);
       return id;
     };
 
     // Content
-    task(physics, 'Record Lesson 1: Motion & Velocity', 'content', 'done', 'high', 'ins1', 'hoc', -6, { reviewer: 'cq', est: 6, tags: 'video,lesson', doneAgo: 5 });
-    const lesson2 = task(physics, 'Record Lesson 2: Newton’s Laws', 'content', 'in_review', 'high', 'ins1', 'hoc', 1, {
+    await task(physics, 'Record Lesson 1: Motion & Velocity', 'content', 'done', 'high', 'ins1', 'hoc', -6, { reviewer: 'cq', est: 6, tags: 'video,lesson', doneAgo: 5 });
+    const lesson2 = await task(physics, 'Record Lesson 2: Newton’s Laws', 'content', 'in_review', 'high', 'ins1', 'hoc', 1, {
       reviewer: 'cq',
       est: 6,
       tags: 'video,lesson',
@@ -99,64 +99,62 @@ export function seed(db) {
       checklist: [['Script approved', true], ['Recording', true], ['Editing', true], ['Quiz questions uploaded', true]],
       comments: [['ins1', 'Uploaded the final cut — ready for QA.']],
     });
-    task(physics, 'Record Lesson 3: Work & Energy', 'content', 'in_progress', 'medium', 'ins2', 'hoc', 5, {
+    await task(physics, 'Record Lesson 3: Work & Energy', 'content', 'in_progress', 'medium', 'ins2', 'hoc', 5, {
       reviewer: 'cq',
       est: 6,
       tags: 'video,lesson',
       checklist: [['Script approved', true], ['Recording', false], ['Editing', false]],
     });
-    task(physics, 'Write worksheet for Lessons 1–3', 'content', 'todo', 'medium', 'ins3', 'hoc', 8, { reviewer: 'cq', est: 4, tags: 'worksheet' });
-    task(physics, 'Fix audio sync on Lesson 1 intro', 'content', 'blocked', 'urgent', 'ins2', 'cq', -1, {
+    await task(physics, 'Write worksheet for Lessons 1–3', 'content', 'todo', 'medium', 'ins3', 'hoc', 8, { reviewer: 'cq', est: 4, tags: 'worksheet' });
+    await task(physics, 'Fix audio sync on Lesson 1 intro', 'content', 'blocked', 'urgent', 'ins2', 'cq', -1, {
       desc: 'Audio drifts ~0.5s behind video after 02:10.',
       comments: [['ins2', 'Waiting on the raw footage backup from Systems Ops.']],
     });
-    task(physics, 'Approve Term 1 syllabus', 'content_review', 'done', 'high', 'hoc', 'ops', -12, { doneAgo: 11 });
+    await task(physics, 'Approve Term 1 syllabus', 'content_review', 'done', 'high', 'hoc', 'ops', -12, { doneAgo: 11 });
 
     // Marketing
-    task(campaign, 'Design social media creatives', 'campaign', 'in_progress', 'high', 'mkt1', 'mkt', 3, { reviewer: 'mkt', tags: 'social,design', est: 10 });
-    task(campaign, 'Write email announcement sequence', 'campaign', 'todo', 'medium', 'mkt2', 'mkt', 6, { tags: 'email', est: 5 });
-    task(campaign, 'Film teaser video with instructor', 'campaign', 'todo', 'high', 'ins1', 'mkt', 9, { tags: 'video', desc: 'A 30-second teaser for Physics 101.' });
-    task(campaign, 'Launch paid ads', 'campaign', 'todo', 'urgent', 'mkt1', 'mkt', 12, { tags: 'ads' });
-    task(campaign, 'Competitor pricing research', 'campaign', 'done', 'low', 'mkt2', 'mkt', -4, { doneAgo: 3 });
+    await task(campaign, 'Design social media creatives', 'campaign', 'in_progress', 'high', 'mkt1', 'mkt', 3, { reviewer: 'mkt', tags: 'social,design', est: 10 });
+    await task(campaign, 'Write email announcement sequence', 'campaign', 'todo', 'medium', 'mkt2', 'mkt', 6, { tags: 'email', est: 5 });
+    await task(campaign, 'Film teaser video with instructor', 'campaign', 'todo', 'high', 'ins1', 'mkt', 9, { tags: 'video', desc: 'A 30-second teaser for Physics 101.' });
+    await task(campaign, 'Launch paid ads', 'campaign', 'todo', 'urgent', 'mkt1', 'mkt', 12, { tags: 'ads' });
+    await task(campaign, 'Competitor pricing research', 'campaign', 'done', 'low', 'mkt2', 'mkt', -4, { doneAgo: 3 });
 
     // Product / systems
-    task(release, 'Quiz engine: support image answers', 'feature', 'in_progress', 'high', 'po', 'po', 15, { tags: 'quiz', est: 16 });
-    const safari = task(release, 'Video player freezes on Safari', 'bug', 'todo', 'urgent', 'sys', 'cs', 2, {
+    await task(release, 'Quiz engine: support image answers', 'feature', 'in_progress', 'high', 'po', 'po', 15, { tags: 'quiz', est: 16 });
+    const safari = await task(release, 'Video player freezes on Safari', 'bug', 'todo', 'urgent', 'sys', 'cs', 2, {
       reviewer: 'qc',
       tags: 'video,safari',
       desc: 'Reported by 14 students this week. Reproducible on Safari 17.',
       comments: [['cs', 'Raising this from the support queue — top complaint right now.']],
     });
-    task(release, 'Regression test plan for v2.4', 'qc_check', 'todo', 'high', 'qc', 'sys', 20, { est: 8 });
-    task(release, 'Student dashboard wireframes sign-off', 'feature', 'done', 'medium', 'po', 'ceo', -3, { doneAgo: 2 });
+    await task(release, 'Regression test plan for v2.4', 'qc_check', 'todo', 'high', 'qc', 'sys', 20, { est: 8 });
+    await task(release, 'Student dashboard wireframes sign-off', 'feature', 'done', 'medium', 'po', 'ceo', -3, { doneAgo: 2 });
 
     // Customer service
-    task(support, 'Answer refund tickets older than 3 days', 'support', 'in_progress', 'high', 'cs1', 'cs', 0, { tags: 'refunds' });
-    task(support, 'Update FAQ: login & password reset', 'support', 'todo', 'medium', 'cs2', 'cs', 4, { reviewer: 'cs', tags: 'faq' });
-    task(support, 'Weekly ticket summary for leadership', 'support', 'todo', 'low', 'cs', 'ceo', 2);
-    task(support, 'Call back students with failed payments', 'support', 'done', 'high', 'cs2', 'cs', -2, { doneAgo: 1 });
+    await task(support, 'Answer refund tickets older than 3 days', 'support', 'in_progress', 'high', 'cs1', 'cs', 0, { tags: 'refunds' });
+    await task(support, 'Update FAQ: login & password reset', 'support', 'todo', 'medium', 'cs2', 'cs', 4, { reviewer: 'cs', tags: 'faq' });
+    await task(support, 'Weekly ticket summary for leadership', 'support', 'todo', 'low', 'cs', 'ceo', 2);
+    await task(support, 'Call back students with failed payments', 'support', 'done', 'high', 'cs2', 'cs', -2, { doneAgo: 1 });
 
     // Systems ops / QC
-    task(audit, 'Define content quality checklist', 'qc_check', 'in_progress', 'high', 'cq', 'sys', 7, {
+    await task(audit, 'Define content quality checklist', 'qc_check', 'in_progress', 'high', 'cq', 'sys', 7, {
       checklist: [['Audio levels', true], ['Captions accuracy', false], ['Slide typos', false], ['Quiz answer key', false]],
     });
-    task(audit, 'Spot-check 20 published lessons', 'qc_check', 'todo', 'medium', 'qc', 'sys', 18);
-    task(null, 'Back up raw lesson footage to cold storage', 'operations', 'in_progress', 'high', 'sys', 'ops', 1, { tags: 'infra' });
+    await task(audit, 'Spot-check 20 published lessons', 'qc_check', 'todo', 'medium', 'qc', 'sys', 18);
+    await task(null, 'Back up raw lesson footage to cold storage', 'operations', 'in_progress', 'high', 'sys', 'ops', 1, { tags: 'infra' });
 
     // Leadership
-    task(null, 'Q4 budget review', 'operations', 'todo', 'high', 'ops', 'ceo', 6);
-    task(null, 'Monthly all-hands agenda', 'general', 'todo', 'medium', 'ceo', 'ceo', 10);
-    task(null, 'Hire two new instructors', 'operations', 'in_progress', 'medium', 'hoc', 'ops', 21, { tags: 'hiring' });
+    await task(null, 'Q4 budget review', 'operations', 'todo', 'high', 'ops', 'ceo', 6);
+    await task(null, 'Monthly all-hands agenda', 'general', 'todo', 'medium', 'ceo', 'ceo', 10);
+    await task(null, 'Hire two new instructors', 'operations', 'in_progress', 'medium', 'hoc', 'ops', 21, { tags: 'hiring' });
 
     // Customer Service call list
-    const callList = Number(
-      db
-        .prepare('INSERT INTO call_lists (name, description, source_filename, columns, created_by) VALUES (?, ?, ?, ?, ?)')
+    const callList = (
+      await prepare('INSERT INTO call_lists (name, description, source_filename, columns, created_by) VALUES (?, ?, ?, ?, ?)')
         .run('Failed payments — October', 'Students whose card payment failed this month.', 'failed-payments-october.xlsx', JSON.stringify(['Name', 'Phone', 'Email', 'Course', 'Amount']), ids.cs)
-        .lastInsertRowid,
-    );
-    const insCall = db.prepare('INSERT INTO calls (list_id, name, phone, email, data, assignee_id, status, notes, attempts, last_called_at, callback_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    const insLog = db.prepare('INSERT INTO call_logs (call_id, user_id, status, note) VALUES (?, ?, ?, ?)');
+    ).lastInsertRowid;
+    const insCall = prepare('INSERT INTO calls (list_id, name, phone, email, data, assignee_id, status, notes, attempts, last_called_at, callback_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const insLog = prepare('INSERT INTO call_logs (call_id, user_id, status, note) VALUES (?, ?, ?, ?)');
     const CONTACTS = [
       ['Ahmed Mahmoud', '+20 100 123 4501', 'Physics 101', '450', 'cs1', 'reached', 'Paid by bank transfer.'],
       ['Sara Ali', '+20 100 123 4502', 'Physics 101', '450', 'cs2', 'no_answer', ''],
@@ -173,67 +171,73 @@ export function seed(db) {
     for (const [name, phone, course, amount, who, status, note] of CONTACTS) {
       const email = `${name.split(' ')[0].toLowerCase()}@example.com`;
       const called = status !== 'pending';
-      const cid = Number(
-        insCall
-          .run(callList, name, phone, email, JSON.stringify({ Name: name, Phone: phone, Email: email, Course: course, Amount: amount }), who ? ids[who] : null, status, note, called ? 1 : 0, called ? nowUtc() : null, status === 'callback' ? tomorrow : null)
-          .lastInsertRowid,
-      );
-      if (called) insLog.run(cid, ids[who], status, note);
+      const { lastInsertRowid: cid } = await insCall.run(callList, name, phone, email, JSON.stringify({ Name: name, Phone: phone, Email: email, Course: course, Amount: amount }), who ? ids[who] : null, status, note, called ? 1 : 0, called ? nowUtc() : null, status === 'callback' ? tomorrow : null);
+      if (called) await insLog.run(cid, ids[who], status, note);
     }
 
     // Offline centers, availability and weekly schedule
-    const insCenter = db.prepare('INSERT INTO centers (name, city, address, phone, contact_name, capacity) VALUES (?, ?, ?, ?, ?, ?)');
-    const center = (...v) => Number(insCenter.run(...v).lastInsertRowid);
-    const nasr = center('Nasr City Center', 'Cairo', '12 Abbas El Akkad St.', '+20 2 2401 0001', 'Mahmoud Saeed', 3);
-    const maadi = center('Maadi Center', 'Cairo', 'Road 9, Maadi', '+20 2 2358 0002', 'Dalia Ashraf', 2);
-    const heliopolis = center('Heliopolis Center', 'Cairo', '45 El Merghany St.', '+20 2 2415 0003', 'Sherif Lotfy', 2);
-    center('Smouha Center', 'Alexandria', '7 Fawzy Moaz St., Smouha', '+20 3 4250 0004', 'Rania Adel', 2);
+    const insCenter = prepare('INSERT INTO centers (name, city, address, phone, contact_name, capacity) VALUES (?, ?, ?, ?, ?, ?)');
+    const center = async (...v) => (await insCenter.run(...v)).lastInsertRowid;
+    const nasr = await center('Nasr City Center', 'Cairo', '12 Abbas El Akkad St.', '+20 2 2401 0001', 'Mahmoud Saeed', 3);
+    const maadi = await center('Maadi Center', 'Cairo', 'Road 9, Maadi', '+20 2 2358 0002', 'Dalia Ashraf', 2);
+    const heliopolis = await center('Heliopolis Center', 'Cairo', '45 El Merghany St.', '+20 2 2415 0003', 'Sherif Lotfy', 2);
+    await center('Smouha Center', 'Alexandria', '7 Fawzy Moaz St., Smouha', '+20 3 4250 0004', 'Rania Adel', 2);
 
-    const round = Number(
-      db
-        .prepare('INSERT INTO availability_rounds (title, starts_on, ends_on, due_date, notes, created_by) VALUES (?, ?, ?, ?, ?, ?)')
-        .run('Term 2 — center sessions', day(14), day(120), day(5), 'Add every weekly slot you can teach in person.', ids.hoc).lastInsertRowid,
-    );
-    const insAvail = db.prepare('INSERT INTO availability (round_id, instructor_id, slots, center_ids, max_sessions, notes, submitted_by) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    insAvail.run(round, ids.ins1, JSON.stringify([
+    const round = (
+      await prepare('INSERT INTO availability_rounds (title, starts_on, ends_on, due_date, notes, created_by) VALUES (?, ?, ?, ?, ?, ?)')
+        .run('Term 2 — center sessions', day(14), day(120), day(5), 'Add every weekly slot you can teach in person.', ids.hoc)
+    ).lastInsertRowid;
+    const insAvail = prepare('INSERT INTO availability (round_id, instructor_id, slots, center_ids, max_sessions, notes, submitted_by) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    await insAvail.run(round, ids.ins1, JSON.stringify([
       { day: 'sat', start: '10:00', end: '16:00' },
       { day: 'mon', start: '16:00', end: '21:00' },
       { day: 'wed', start: '16:00', end: '21:00' },
     ]), JSON.stringify([nasr, heliopolis]), 4, 'Prefer east Cairo centers.', ids.ins1);
-    insAvail.run(round, ids.ins2, JSON.stringify([
+    await insAvail.run(round, ids.ins2, JSON.stringify([
       { day: 'sun', start: '12:00', end: '20:00' },
       { day: 'tue', start: '12:00', end: '20:00' },
       { day: 'thu', start: '15:00', end: '21:00' },
     ]), JSON.stringify([maadi, nasr]), 3, '', ids.ins2);
     for (const i of ['ins1', 'ins2', 'ins3']) {
-      db.prepare('INSERT INTO notifications (user_id, type, message, link, params) VALUES (?, ?, ?, ?, ?)').run(
+      await prepare('INSERT INTO notifications (user_id, type, message, link, params) VALUES (?, ?, ?, ?, ?)').run(
         ids[i], 'availability_requested', 'Karim Fathy asked for your availability: "Term 2 — center sessions"', '/centers?tab=mine',
         JSON.stringify({ actor: 'Karim Fathy', title: 'Term 2 — center sessions' }),
       );
     }
-    const insAssign = db.prepare('INSERT INTO center_assignments (center_id, instructor_id, day, start_time, end_time, subject, round_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-    insAssign.run(nasr, ids.ins1, 'sat', '10:00', '12:00', 'Physics — Grade 12', round, ids.hoc);
-    insAssign.run(heliopolis, ids.ins1, 'mon', '17:00', '19:00', 'Physics — Grade 11', round, ids.hoc);
-    insAssign.run(maadi, ids.ins2, 'sun', '14:00', '16:00', 'Chemistry — Grade 12', round, ids.hoc);
-    insAssign.run(nasr, ids.ins2, 'thu', '17:00', '19:00', 'Chemistry — Grade 11', round, ids.hoc);
+    const insAssign = prepare('INSERT INTO center_assignments (center_id, instructor_id, day, start_time, end_time, subject, round_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    await insAssign.run(nasr, ids.ins1, 'sat', '10:00', '12:00', 'Physics — Grade 12', round, ids.hoc);
+    await insAssign.run(heliopolis, ids.ins1, 'mon', '17:00', '19:00', 'Physics — Grade 11', round, ids.hoc);
+    await insAssign.run(maadi, ids.ins2, 'sun', '14:00', '16:00', 'Chemistry — Grade 12', round, ids.hoc);
+    await insAssign.run(nasr, ids.ins2, 'thu', '17:00', '19:00', 'Chemistry — Grade 11', round, ids.hoc);
 
-    const insNote = db.prepare('INSERT INTO notifications (user_id, type, message, task_id, params) VALUES (?, ?, ?, ?, ?)');
-    insNote.run(ids.cq, 'review_requested', 'Nour Adel requested your review on "Record Lesson 2: Newton’s Laws"', lesson2, JSON.stringify({ actor: 'Nour Adel', title: 'Record Lesson 2: Newton’s Laws' }));
-    insNote.run(ids.sys, 'assigned', 'Rana Kamal assigned you "Video player freezes on Safari"', safari, JSON.stringify({ actor: 'Rana Kamal', title: 'Video player freezes on Safari' }));
+    const insNote = prepare('INSERT INTO notifications (user_id, type, message, task_id, params) VALUES (?, ?, ?, ?, ?)');
+    await insNote.run(ids.cq, 'review_requested', 'Nour Adel requested your review on "Record Lesson 2: Newton’s Laws"', lesson2, JSON.stringify({ actor: 'Nour Adel', title: 'Record Lesson 2: Newton’s Laws' }));
+    await insNote.run(ids.sys, 'assigned', 'Rana Kamal assigned you "Video player freezes on Safari"', safari, JSON.stringify({ actor: 'Rana Kamal', title: 'Video player freezes on Safari' }));
 
     // Sample notifications are history, not news: never email them.
-    db.exec('UPDATE notifications SET emailed = 1');
+    await tx.run('UPDATE notifications SET emailed = 1');
+    await bump(tx, 'org');
   });
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { DB_FILE } = await import('./config.js');
-  if (process.argv.includes('--reset')) for (const f of [DB_FILE, `${DB_FILE}-wal`, `${DB_FILE}-shm`]) fs.rmSync(f, { force: true });
-  const db = openDb(DB_FILE);
-  if (db.prepare('SELECT COUNT(*) AS n FROM users').get().n > 0) {
+  const { localDataDir } = await import('./config.js');
+  const db = await openDb({ dataDir: process.env.DATABASE_URL ? undefined : localDataDir() });
+  if (process.argv.includes('--reset') && process.env.DATABASE_URL && !process.argv.includes('--force')) {
+    console.error('DATABASE_URL is set: this would wipe that database. Add --force if that is really what you want.');
+    process.exit(1);
+  }
+  if (process.argv.includes('--reset')) {
+    // Empties every table; the schema stays.
+    const tables = await db.all("SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('app_state')");
+    await db.run(`TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(', ')} RESTART IDENTITY CASCADE`);
+    await db.run("UPDATE app_state SET value = value + 1 WHERE key = 'org'");
+  }
+  if ((await db.get('SELECT COUNT(*) AS n FROM users')).n > 0) {
     console.log('Database already has data; use --reset to wipe it.');
   } else {
-    seed(db);
-    console.log(`Seeded demo organisation into ${DB_FILE}. Every account uses the password "${DEMO_PASSWORD}".`);
+    await seed(db);
+    console.log(`Seeded the demo organisation. Every account uses the password "${DEMO_PASSWORD}".`);
   }
+  await db.close();
 }

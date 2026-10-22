@@ -1,11 +1,12 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
-import { openDb } from '../src/db.js';
-import { seed, DEMO_PASSWORD } from '../src/seed.js';
+import { testDb } from './helpers.js';
+import { DEMO_PASSWORD } from '../src/seed.js';
 import { createLoginLimiter } from '../src/security.js';
 
 let server;
+let db;
 let base;
 const tokens = {};
 
@@ -22,8 +23,7 @@ const json = async (res) => ({ status: res.status, body: await res.json().catch(
 const EMAILS = { ceo: 'ceo@taskflow.local', ops: 'ops@taskflow.local', hoc: 'content.head@taskflow.local', cs: 'cs.head@taskflow.local', cs1: 'support1@taskflow.local' };
 
 before(async () => {
-  const db = openDb(':memory:');
-  seed(db);
+  db = await testDb();
   server = createApp({ db, secret: 'test' }).listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}`;
@@ -53,25 +53,28 @@ test('repeated wrong passwords lock the account for this client', async () => {
   assert.equal((await call(null, 'POST', '/auth/login', { email: 'product@taskflow.local', password: DEMO_PASSWORD })).status, 200);
 });
 
-test('login limiter window expires and success resets the account counter', () => {
-  const lim = createLoginLimiter({ windowMs: 1000, maxPerAccount: 2, maxPerIp: 100 });
-  lim.fail('1.1.1.1', 'a@x', 0);
-  lim.fail('1.1.1.1', 'a@x', 10);
-  assert.ok(lim.retryAfter('1.1.1.1', 'a@x', 20) > 0);
-  assert.equal(lim.retryAfter('1.1.1.1', 'a@x', 2000), 0);
-  lim.fail('1.1.1.1', 'b@x', 0);
-  lim.succeed('1.1.1.1', 'b@x');
-  lim.fail('1.1.1.1', 'b@x', 5);
-  assert.equal(lim.retryAfter('1.1.1.1', 'b@x', 6), 0);
+test('login limiter window expires and success resets the account counter', async () => {
+  const lim = createLoginLimiter(db, { namespace: 'unit', windowMs: 1000, maxPerAccount: 2, maxPerIp: 100 });
+  await lim.fail('1.1.1.1', 'a@x', 0);
+  await lim.fail('1.1.1.1', 'a@x', 10);
+  assert.ok((await lim.retryAfter('1.1.1.1', 'a@x', 20)) > 0);
+  assert.equal(await lim.retryAfter('1.1.1.1', 'a@x', 2000), 0);
+  await lim.fail('1.1.1.1', 'b@x', 0);
+  await lim.succeed('1.1.1.1', 'b@x');
+  await lim.fail('1.1.1.1', 'b@x', 5);
+  assert.equal(await lim.retryAfter('1.1.1.1', 'b@x', 6), 0);
 });
 
-test('only user admins can download a backup, and it is a SQLite file', async () => {
+test('only user admins can download a backup of every table', async () => {
   assert.equal((await call('hoc', 'GET', '/admin/backup')).status, 403);
   const res = await call('ops', 'GET', '/admin/backup');
   assert.equal(res.status, 200);
-  assert.match(res.headers.get('content-disposition'), /taskflow-backup-.*\.db/);
-  const buf = Buffer.from(await res.arrayBuffer());
-  assert.equal(buf.subarray(0, 15).toString(), 'SQLite format 3');
+  assert.match(res.headers.get('content-disposition'), /taskflow-backup-.*\.json/);
+  const backup = await res.json();
+  assert.equal(backup.app, 'taskflow');
+  assert.equal(backup.tables.users.length, (await db.get('SELECT COUNT(*) AS n FROM users')).n);
+  assert.ok(backup.tables.tasks.length > 0);
+  assert.ok(backup.tables.calls.length > 0);
 });
 
 test('bulk user import creates, skips duplicates, reports bad rows and resolves managers', async () => {

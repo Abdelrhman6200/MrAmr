@@ -6,6 +6,25 @@ import { download, guessColumns, readSpreadsheet, toCsv } from '../sheet.js';
 import { parseServerTime } from '../time.js';
 import { Avatar, CallStatusPill, Empty, Modal, Progress, formatDate, formatDateTime, timeAgo } from '../components/ui.jsx';
 
+// Splits rows into requests of at most 1000 rows and well under 4 MB each.
+function chunkRows(rows, maxRows = 1000, maxBytes = 800_000) {
+  const chunks = [];
+  let current = [];
+  let bytes = 0;
+  for (const row of rows) {
+    const size = JSON.stringify(row).length;
+    if (current.length && (current.length >= maxRows || bytes + size > maxBytes)) {
+      chunks.push(current);
+      current = [];
+      bytes = 0;
+    }
+    current.push(row);
+    bytes += size;
+  }
+  if (current.length) chunks.push(current);
+  return chunks;
+}
+
 const OUTCOMES = ['reached', 'no_answer', 'callback', 'not_interested', 'wrong_number'];
 const MAX_ROWS = 5000;
 
@@ -241,15 +260,21 @@ function UploadModal({ agents, onClose, onDone }) {
     setError('');
     try {
       const agentIds = mode === 'split' ? chosen : mode === 'mine' ? [user.id] : [];
-      const res = await api.post('/calls/lists', {
-        name,
-        description,
-        filename,
-        columns: sheet.columns,
-        agent_ids: agentIds,
-        rows: sheet.rows.map((r) => ({ name: map.name ? r[map.name] : '', phone: map.phone ? r[map.phone] : '', email: map.email ? r[map.email] : '', data: r })),
-      });
-      notify(t('upload.done', { n: res.imported }), 'success');
+      const rows = sheet.rows.map((r) => ({ name: map.name ? r[map.name] : '', phone: map.phone ? r[map.phone] : '', email: map.email ? r[map.email] : '', data: r }));
+      // Big sheets go up in parts so each request stays small; calls are assigned once all are in.
+      const [first, ...rest] = chunkRows(rows);
+      const single = !rest.length;
+      const res = await api.post('/calls/lists', { name, description, filename, columns: sheet.columns, agent_ids: single ? agentIds : [], rows: first });
+      let imported = res.imported;
+      try {
+        for (const part of rest) imported += (await api.post(`/calls/lists/${res.id}/rows`, { rows: part })).imported;
+        if (!single && agentIds.length) await api.post(`/calls/lists/${res.id}/assign`, { agent_ids: agentIds, only_unassigned: true });
+      } catch (err) {
+        // Don't leave half a sheet behind.
+        await api.del(`/calls/lists/${res.id}`).catch(() => {});
+        throw err;
+      }
+      notify(t('upload.done', { n: imported }), 'success');
       onDone(res.id);
     } catch (err) {
       setError(err.message);

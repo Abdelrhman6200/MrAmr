@@ -2,10 +2,11 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
-import { openDb } from '../src/db.js';
-import { seed, DEMO_PASSWORD } from '../src/seed.js';
+import { testDb } from './helpers.js';
+import { DEMO_PASSWORD } from '../src/seed.js';
 import { dispatchNotificationEmails } from '../src/mail.js';
 import { parseServerTime } from '../../client/src/time.js';
+import { DAY, utcAgo } from '../src/time.js';
 
 let db;
 let server;
@@ -36,8 +37,7 @@ async function api(who, method, path, body) {
 }
 
 before(async () => {
-  db = openDb(':memory:');
-  seed(db);
+  db = await testDb();
   server = createApp({ db, secret: 'qc', mailer: slowMailer, appUrl: 'https://tasks.example.com' }).listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}`;
@@ -89,17 +89,20 @@ test('#2 a call-back due earlier today is due now', async () => {
 });
 
 test('#3 notification emails are retried when sending fails', async () => {
-  db.prepare('UPDATE notifications SET emailed = 1').run();
-  db.prepare("INSERT INTO notifications (user_id, type, message, params) VALUES (?, 'assigned', 'x', ?)").run(ids.po, JSON.stringify({ actor: 'A', title: 'T' }));
+  await db.run('UPDATE notifications SET emailed = 1');
+  await db.run("INSERT INTO notifications (user_id, type, message, params) VALUES (?, 'assigned', 'x', ?)", [ids.po, JSON.stringify({ actor: 'A', title: 'T' })]);
   let fail = true;
   const sent = [];
   const flaky = { enabled: true, send: async (m) => {
     if (fail) throw new Error('SMTP down');
     sent.push(m);
   } };
-  assert.equal(await dispatchNotificationEmails(db, flaky, 'https://x', { now: 0 }), 0);
+  const t0 = Date.now();
+  assert.equal(await dispatchNotificationEmails(db, flaky, 'https://x', { now: t0 }), 0);
   fail = false;
-  assert.equal(await dispatchNotificationEmails(db, flaky, 'https://x', { now: 10 * 60_000 }), 1);
+  // Backed off for a minute after the failure, then retried.
+  assert.equal(await dispatchNotificationEmails(db, flaky, 'https://x', { now: t0 + 1000 }), 0);
+  assert.equal(await dispatchNotificationEmails(db, flaky, 'https://x', { now: t0 + 10 * 60_000 }), 1);
   assert.equal(sent.length, 1);
   assert.equal(sent[0].to, 'product@taskflow.local');
 });
@@ -157,14 +160,15 @@ test('#9 completion times use one format, so the 7-day window is exact', async (
   // Something finished 7 days and 1 hour ago is outside "done this week".
   const old = (await api('ins1', 'POST', '/tasks', { title: 'Old', status: 'done' })).body;
   assert.match(old.completed_at, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-  db.prepare("UPDATE tasks SET completed_at = datetime('now', '-7 days', '-1 hours') WHERE id = ?").run(old.id);
+  await db.run('UPDATE tasks SET completed_at = ? WHERE id = ?', [utcAgo(7 * DAY + 3600_000), old.id]);
   const team = (await api('hoc', 'GET', '/dashboard')).body.team;
   const nour = team.find((m) => m.id === ids.ins1);
-  const expected = db
-    .prepare("SELECT COUNT(*) AS n FROM tasks WHERE assignee_id = ? AND status = 'done' AND completed_at >= datetime('now', '-7 days')")
-    .get(ids.ins1).n;
+  const { n: expected } = await db.get("SELECT COUNT(*) AS n FROM tasks WHERE assignee_id = ? AND status = 'done' AND completed_at >= ?", [
+    ids.ins1,
+    utcAgo(7 * DAY),
+  ]);
   assert.equal(nour.done_week, expected);
-  assert.ok(!db.prepare("SELECT 1 FROM tasks WHERE completed_at LIKE '%T%'").get(), 'no ISO-format completion times remain');
+  assert.ok(!(await db.get("SELECT 1 FROM tasks WHERE completed_at LIKE '%T%'")), 'no ISO-format completion times remain');
 });
 
 test('#10 org changes take effect immediately even with the cached hierarchy', async () => {

@@ -4,7 +4,7 @@ Task and project management for an education-content company. It's built around 
 
 ## Quick start
 
-Requires **Node.js 22.13+**. The database is Node's built-in SQLite, so there are no native modules to compile.
+Requires **Node.js 22.9+**.
 
 ```bash
 npm install
@@ -18,7 +18,9 @@ For development, with hot reload for both the API and the UI:
 npm run dev       # UI on http://localhost:5173 (proxies /api to :3001)
 ```
 
-On first start the app loads a demo organisation. **Every demo account uses the password `password123`.** The login screen has one-click buttons for each role. To wipe the data and reload the demo, run `npm run seed`.
+Locally the app uses a built-in Postgres database ([PGlite](https://pglite.dev)) stored in `./data`, so there is nothing else to install. Put a `DATABASE_URL` in `.env` (see `.env.example`) to use Supabase instead.
+
+On first start with an empty database the app loads a demo organisation. **Every demo account uses the password `password123`.** The login screen has one-click buttons for each role. To wipe the local data and reload the demo, run `npm run seed`.
 
 | Role | Email |
 | --- | --- |
@@ -92,86 +94,71 @@ These rules are in `server/src/access.js`.
 ## Project layout
 
 ```
+api/index.js        Vercel function: serves the whole API
 server/src/
-  index.js          entry point (opens DB, seeds if empty, serves API + built UI)
+  index.js          local/Node server (API + built UI)
   app.js            Express app factory
   access.js         hierarchy-based permission rules
   meta.js           roles, departments, statuses, priorities, task types
-  db.js             SQLite schema
-  routes/           auth, users, projects, tasks, dashboard/reports, notifications, calls, centers
+  db.js             Postgres schema and connection (Supabase via DATABASE_URL, PGlite otherwise)
+  routes/           auth, users, projects, tasks, dashboard/reports, notifications, calls, centers, admin
+  mail.js           email (password resets, notification emails)
   seed.js           demo organisation
 server/test/        API tests (node:test)
 client/src/
   pages/            Dashboard, Tasks, Projects, ProjectDetail, Calendar, Calls, Centers, Team, Reports, Users, Settings
   components/       Layout, TaskDetail, TaskForm, board/list views, UI primitives
-  pages/Calls.jsx   call lists, sheet upload, agent queue
-  pages/Centers.jsx centers, availability collection, weekly center schedule
   i18n.js           English and Arabic strings
   sheet.js          Excel/CSV reading, column detection, CSV export
 ```
 
 ## Configuration
 
-| Variable | Default | |
+| Variable | | |
 | --- | --- | --- |
-| `PORT` | `3001` | HTTP port |
-| `DATA_DIR` | `./data` | where the SQLite database lives |
-| `DB_FILE` | `$DATA_DIR/taskflow.db` | database file |
-| `AUTH_SECRET` | generated into `$DATA_DIR/.secret` | signs login tokens. **Set this in production.** |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | — | used only on the first start with an empty database. When set, the app creates this one Head of Company account and **no demo data**. When unset, it loads the demo company. |
-| `TZ` | system zone | time zone for "today", overdue and call-backs, e.g. `Africa/Cairo` |
-| `TRUST_PROXY` | — | set to `1` behind nginx/Caddy/a load balancer so login protection sees real client addresses |
-| `CORS_ORIGIN` | — | when the web app is hosted separately (e.g. on Vercel): its address(es), comma-separated. `*` matches one part of a domain, e.g. `https://taskflow-*.vercel.app` for preview deployments. |
-| `VITE_API_URL` | — | **web app build setting** (set in Vercel, not on the server): the API server's address, e.g. `https://taskflow-api.onrender.com` |
-| `APP_URL` | — | the public address, e.g. `https://tasks.yourcompany.com`. Used for links in emails. Email password resets only work when this is set. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `MAIL_FROM` | — | an email account to send from (Google Workspace, Microsoft 365, or any SMTP service). Without `SMTP_HOST` the app works but sends no email. |
+| `DATABASE_URL` | **required on Vercel** | Supabase connection string (Transaction pooler, port 6543). Without it the app uses the built-in local database in `DATA_DIR` (default `./data`). |
+| `AUTH_SECRET` | **required on Vercel** | signs sign-in sessions; any long random string (`openssl rand -hex 32`). Locally one is generated into `./data/.secret`. Changing it signs everyone out. |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | first run | used only while the database has no users: creates this one Head of Company account and **no demo data**. Locally, without them, the demo company is loaded (on Vercel only if `DEMO_DATA=1`). |
+| `APP_TIMEZONE` | `Africa/Cairo` | time zone for "today", overdue and call-backs. Vercel servers run in UTC, so this matters. |
+| `APP_URL` | optional | public address used for links in emails. On Vercel it defaults to the production domain. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `MAIL_FROM` | optional | an email account to send from (Google Workspace, Microsoft 365, or any SMTP service). Without `SMTP_HOST` the app works but sends no email. |
+| `CRON_SECRET` | optional | protects the daily email retry job (`/api/cron/emails`); Vercel Cron sends it automatically. |
+| `DATABASE_CA` | optional | Supabase's CA certificate (Settings → Database → SSL), to verify the database's TLS certificate. Connections are always encrypted. |
+| `CORS_ORIGIN` | optional | only if the web app is hosted on a different address from the API: its address(es), comma-separated; `*` matches one part of a domain. |
+| `PORT`, `TRUST_PROXY` | local server | port (default `3001`); set `TRUST_PROXY=1` behind nginx/Caddy. |
 
-## Deploying
+## Deploying: Vercel + Supabase
 
-### Vercel (web app) + Render or Railway (server)
+Vercel hosts the web app and runs the API as a serverless function (`api/index.js`); Supabase is the database. Both have free plans that are enough to start.
 
-Vercel can host the web app, but not the server: Vercel functions have no permanent disk, so the database would be wiped whenever Vercel recycles them. The server therefore runs on Render or Railway with a persistent disk, and the web app on Vercel talks to it.
+**1. Supabase (database)**
+1. Create a project at [supabase.com](https://supabase.com). Choose a region close to your users (and later the same region for Vercel's functions), and save the **database password** it asks for.
+2. Open **Connect** (top of the project page) → **Connection string** → **Transaction pooler**. Copy the URI. It looks like
+   `postgresql://postgres.abcdefghijkl:[YOUR-PASSWORD]@aws-0-eu-central-1.pooler.supabase.com:6543/postgres`.
+   Replace `[YOUR-PASSWORD]` with the database password. This string is a secret: paste it only into Vercel.
 
-**1. Server on Render** (about $7/month: persistent disks need a paid instance)
-1. In Render: **New → Blueprint**, pick this repository. It reads `render.yaml` and creates the `taskflow-api` service with a 1 GB disk at `/app/data`.
-2. Fill in the values it asks for: `ADMIN_EMAIL`, `ADMIN_PASSWORD` (8+ characters, only used on the very first start), `ADMIN_NAME`, and for now put any placeholder in `CORS_ORIGIN` and `APP_URL`.
-3. After it deploys, note its address, e.g. `https://taskflow-api.onrender.com`. Opening `…/api/health` should show `{"ok":true}`.
+The app creates its own tables on first start. The publishable/anon key is not used: the browser never talks to Supabase directly, only to the API.
 
-**…or on Railway** (usage-based, typically $5+/month)
-1. **New Project → Deploy from GitHub repo** → this repository. Railway uses the `Dockerfile` and `railway.json`.
-2. In the service: **Settings → Volumes → Add volume**, mount path `/app/data`.
-3. **Variables:** `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`, `AUTH_SECRET` (any long random string, e.g. from `openssl rand -hex 32`), `TZ=Africa/Cairo`, `TRUST_PROXY=1`.
-4. **Settings → Networking → Generate domain**, and note the address.
-
-Keep the server at **one instance**: the database lives on that instance's disk.
-
-**2. Web app on Vercel**
+**2. Vercel (web app + API)**
 1. **Add New → Project** → import this repository. Vercel reads `vercel.json`; leave the build settings as they are.
-2. **Settings → Environment Variables:** `VITE_API_URL` = the server address from step 1 (no trailing `/api`). Apply it to Production and Preview.
-3. Deploy, and note the site address, e.g. `https://taskflow.vercel.app`.
+2. **Settings → Environment Variables** (Production and Preview):
+   - `DATABASE_URL` = the Supabase string from step 1
+   - `AUTH_SECRET` = a long random string
+   - `ADMIN_EMAIL`, `ADMIN_PASSWORD` (8+ characters), `ADMIN_NAME` = the first Head of Company account
+   - `APP_TIMEZONE` = `Africa/Cairo`
+   - optional: the `SMTP_*` settings and `MAIL_FROM` for email, and `CRON_SECRET`
+3. Deploy (or **Deployments → ⋯ → Redeploy** after changing variables). Open the site and sign in with `ADMIN_EMAIL`.
+4. Optional: **Settings → Functions → Function Region**: pick the region nearest your Supabase project; every page load talks to the database, so this keeps the app fast.
 
-**3. Connect them:** back on Render/Railway set `CORS_ORIGIN` to the Vercel address (add `,https://taskflow-*.vercel.app` to allow preview deployments) and `APP_URL` to the same Vercel address, then redeploy the server. Sign in on the Vercel address with your `ADMIN_EMAIL`.
+If a setting is missing, the sign-in page says which one. `…/api/health` answers `{"ok":true}` when the API can reach the database.
 
-If you change `VITE_API_URL` later, redeploy on Vercel: it is built into the web app.
+**Backups:** Supabase keeps daily backups on its paid plans. Any time, the Head of Company or Operations Manager can also click **Download backup** on the Users page for a JSON copy of every table.
 
-### Docker on your own server
+**Passwords:** people can click **Forgot password?** on the sign-in page to get a one-hour reset link by email, once `SMTP_*` is set. Without email, the Head of Company or Operations Manager opens the person in **Users → Edit → Create password reset link** and sends that link privately (for example on WhatsApp). It works once and lasts 72 hours. Resetting or changing a password signs that person out everywhere else.
 
-With Docker on any Linux server:
+**Email notifications:** with email set up, everyone also receives their notifications by email, grouped per person, in their chosen language. Each person can turn this off on their profile page. Emails are sent right after the change that caused them; anything that failed is retried by later activity and by a daily Vercel Cron job.
 
-```bash
-cp .env.example .env      # fill in ADMIN_EMAIL, ADMIN_PASSWORD and AUTH_SECRET (openssl rand -hex 32)
-docker compose up -d      # http://your-server:3001
-```
-
-Data lives in the `taskflow-data` volume. The container starts as root only to make the data disk writable, then runs the app as the unprivileged `node` user. Put the app behind HTTPS (for example with Caddy or nginx) before people sign in over the internet, and set `TRUST_PROXY=1` when you do.
-
-Without Docker: install Node.js 22.13+, run `npm ci && npm run build`, then start it with the same environment variables (`ADMIN_EMAIL=… ADMIN_PASSWORD=… AUTH_SECRET=… TZ=Africa/Cairo npm start`) under a process manager such as systemd or pm2.
-
-**Backups:** the Head of Company or Operations Manager can click **Download backup** on the Users page at any time. The file is a complete copy of the database. To restore it, stop the app, replace `taskflow.db` in the data directory with the backup file, and start the app again.
-
-**Passwords:** people can click **Forgot password?** on the sign-in page to get a one-hour reset link by email, once `SMTP_*` and `APP_URL` are set. Without email, the Head of Company or Operations Manager opens the person in **Users → Edit → Create password reset link** and sends that link privately (for example on WhatsApp). It works once and lasts 72 hours. Resetting or changing a password signs that person out everywhere else.
-
-**Email notifications:** with email set up, everyone also receives their notifications by email, grouped into at most one email a minute, in their chosen language. Each person can turn this off on their profile page.
+**Large call sheets** (up to 5,000 rows) are uploaded in parts, so they stay under Vercel's 4.5 MB request limit.
 
 **Security:** passwords are hashed with scrypt. Login is locked for 15 minutes after 8 wrong passwords for an account from the same address. The app sends strict browser security headers (no framing, a content security policy, no MIME sniffing).
 
@@ -179,4 +166,10 @@ Without Docker: install Node.js 22.13+, run `npm ci && npm run build`, then star
 
 ```bash
 npm test
+```
+
+Tests use the built-in database. To run them against a real Postgres server too (they empty it first):
+
+```bash
+TEST_DATABASE_URL=postgres://user:pass@localhost:5432/taskflow_test node --test --test-concurrency=1 server/test/*.test.js
 ```

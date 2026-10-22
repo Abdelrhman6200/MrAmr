@@ -1,14 +1,13 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
-import { openDb } from '../src/db.js';
-import { seed, DEMO_PASSWORD } from '../src/seed.js';
+import { testDb } from './helpers.js';
+import { DEMO_PASSWORD } from '../src/seed.js';
 
 let server;
 let base;
 before(async () => {
-  const db = openDb(':memory:');
-  seed(db);
+  const db = await testDb();
   server = createApp({ db, secret: 't', corsOrigins: ['https://tasks.example.com', 'https://taskflow-*.vercel.app'] }).listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}`;

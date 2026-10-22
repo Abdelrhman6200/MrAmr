@@ -1,8 +1,8 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
-import { openDb } from '../src/db.js';
-import { seed, DEMO_PASSWORD } from '../src/seed.js';
+import { testDb } from './helpers.js';
+import { DEMO_PASSWORD } from '../src/seed.js';
 import { createMailer, dispatchNotificationEmails } from '../src/mail.js';
 
 const outbox = [];
@@ -23,8 +23,7 @@ const login = async (email, password = DEMO_PASSWORD) => (await call('POST', '/a
 const tokenFrom = (text) => /token=([\w-]+)/.exec(text)[1];
 
 before(async () => {
-  db = openDb(':memory:');
-  seed(db);
+  db = await testDb();
   server = createApp({ db, secret: 'test', mailer: fakeMailer, appUrl: 'https://tasks.example.com/' }).listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}`;
@@ -96,14 +95,14 @@ test('admins can create a reset link; others cannot', async () => {
 
 test('notification emails: one per person, in their language, respecting opt-out', async () => {
   outbox.length = 0;
-  db.prepare('UPDATE notifications SET emailed = 1').run();
-  const ids = Object.fromEntries(db.prepare('SELECT email, id FROM users').all().map((u) => [u.email, u.id]));
-  db.prepare("UPDATE users SET language = 'ar' WHERE id = ?").run(ids['instructor1@taskflow.local']);
-  db.prepare('UPDATE users SET email_notifications = 0 WHERE id = ?').run(ids['instructor3@taskflow.local']);
-  const ins = db.prepare('INSERT INTO notifications (user_id, type, message, task_id, link, params) VALUES (?, ?, ?, ?, ?, ?)');
-  ins.run(ids['instructor1@taskflow.local'], 'assigned', 'X assigned you "A"', 1, null, JSON.stringify({ actor: 'Karim', title: 'A' }));
-  ins.run(ids['instructor1@taskflow.local'], 'center_assigned', 'fallback', null, '/centers?tab=mine', JSON.stringify({ actor: 'Karim', center: 'Maadi', day: 'tue', start: '10:00', end: '12:00' }));
-  ins.run(ids['instructor3@taskflow.local'], 'assigned', 'X assigned you "B"', 2, null, JSON.stringify({ actor: 'Karim', title: 'B' }));
+  await db.run('UPDATE notifications SET emailed = 1');
+  const ids = Object.fromEntries((await db.all('SELECT email, id FROM users')).map((u) => [u.email, u.id]));
+  await db.run("UPDATE users SET language = 'ar' WHERE id = ?", [ids['instructor1@taskflow.local']]);
+  await db.run('UPDATE users SET email_notifications = 0 WHERE id = ?', [ids['instructor3@taskflow.local']]);
+  const ins = (...v) => db.run('INSERT INTO notifications (user_id, type, message, task_id, link, params) VALUES (?, ?, ?, ?, ?, ?)', v);
+  await ins(ids['instructor1@taskflow.local'], 'assigned', 'X assigned you "A"', 1, null, JSON.stringify({ actor: 'Karim', title: 'A' }));
+  await ins(ids['instructor1@taskflow.local'], 'center_assigned', 'fallback', null, '/centers?tab=mine', JSON.stringify({ actor: 'Karim', center: 'Maadi', day: 'tue', start: '10:00', end: '12:00' }));
+  await ins(ids['instructor3@taskflow.local'], 'assigned', 'X assigned you "B"', 2, null, JSON.stringify({ actor: 'Karim', title: 'B' }));
 
   assert.equal(await dispatchNotificationEmails(db, fakeMailer, 'https://tasks.example.com'), 1);
   assert.equal(outbox.length, 1);

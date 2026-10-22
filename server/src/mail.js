@@ -60,34 +60,48 @@ const linkFor = (appUrl, n) => (!appUrl ? null : n.link ? `${appUrl}${n.link}` :
 
 // Per-user retry back-off after a failed send: 1, 2, 4 … minutes, capped at 30.
 const backoff = new Map();
+const STALE_CLAIM_MS = 10 * 60_000;
 
-// Sends each user one email summarising their new notifications. Rows are marked
-// emailed only once their email has gone out; failures are retried (within a day).
+// Sends each user one email summarising their new notifications.
+// Rows are claimed atomically (emailed = 2) so several server instances never
+// send the same notification twice; they're marked done (1) once the email has
+// gone out, or released (0) to be retried on failure (within a day).
 export async function dispatchNotificationEmails(db, mailer, appUrl, { now = Date.now() } = {}) {
   if (!mailer.enabled) return 0;
-  const rows = db
-    .prepare(
-      `SELECT n.*, u.email, u.name AS user_name, u.language, u.email_notifications, u.active
-       FROM notifications n JOIN users u ON u.id = n.user_id
-       WHERE n.emailed = 0 AND n.created_at >= datetime('now', '-1 day') ORDER BY n.id LIMIT 200`,
-    )
-    .all();
-  if (!rows.length) return 0;
-  const mark = db.prepare('UPDATE notifications SET emailed = 1 WHERE id = ?');
+  const stamp = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
+  const claimed = await db.all(
+    `UPDATE notifications SET emailed = 2, email_claimed_at = ?
+     WHERE id IN (
+       SELECT id FROM notifications
+       WHERE created_at >= ? AND (emailed = 0 OR (emailed = 2 AND email_claimed_at < ?))
+         AND NOT (user_id = ANY(?::int[]))
+       ORDER BY id LIMIT 200 FOR UPDATE SKIP LOCKED)
+     RETURNING id`,
+    [stamp(now), stamp(now - 864e5), stamp(now - STALE_CLAIM_MS), [...backoff].filter(([, b]) => b.retryAt > now).map(([id]) => id)],
+  );
+  if (!claimed.length) return 0;
+  const rows = await db.all(
+    `SELECT n.*, u.email, u.name AS user_name, u.language, u.email_notifications, u.active
+     FROM notifications n JOIN users u ON u.id = n.user_id WHERE n.id = ANY(?::int[]) ORDER BY n.id`,
+    [claimed.map((c) => c.id)],
+  );
+  const settle = (ids, emailed) => db.run('UPDATE notifications SET emailed = ?, email_claimed_at = NULL WHERE id = ANY(?::int[])', [emailed, ids]);
   const byUser = new Map();
+  const skipped = [];
   for (const n of rows) {
     // Nothing to send for people who opted out or left: settle these straight away.
     if (!n.active || !n.email_notifications) {
-      mark.run(n.id);
+      skipped.push(n.id);
       continue;
     }
-    if ((backoff.get(n.user_id)?.retryAt ?? 0) > now) continue;
     if (!byUser.has(n.user_id)) byUser.set(n.user_id, []);
     byUser.get(n.user_id).push(n);
   }
+  if (skipped.length) await settle(skipped, 1);
   let sent = 0;
   for (const list of byUser.values()) {
     const u = list[0];
+    const ids = list.map((n) => n.id);
     const lang = u.language === 'ar' ? 'ar' : 'en';
     const t = (k, v) => translate(lang, k, v);
     const { html, text } = renderEmail(lang, {
@@ -98,10 +112,11 @@ export async function dispatchNotificationEmails(db, mailer, appUrl, { now = Dat
     });
     try {
       await mailer.send({ to: u.email, subject: t('mail.notifSubject', { n: list.length }), html, text: `${text}\n\n${t('mail.optOut')}` });
-      for (const n of list) mark.run(n.id);
+      await settle(ids, 1);
       backoff.delete(u.user_id);
       sent++;
     } catch (err) {
+      await settle(ids, 0);
       const failures = (backoff.get(u.user_id)?.failures ?? 0) + 1;
       backoff.set(u.user_id, { failures, retryAt: now + Math.min(60_000 * 2 ** (failures - 1), 30 * 60_000) });
       console.error(`Notification email to ${u.email} failed (attempt ${failures}), will retry:`, err.message);
@@ -110,21 +125,38 @@ export async function dispatchNotificationEmails(db, mailer, appUrl, { now = Dat
   return sent;
 }
 
-export function startNotificationEmails(db, mailer, appUrl, intervalMs = 60_000) {
-  if (!mailer.enabled) return () => {};
-  let running = false;
-  const tick = async () => {
-    if (running) return;
-    running = true;
+// Runs dispatch at most once at a time per instance; a request that arrives while
+// one is running schedules exactly one more run afterwards.
+export function emailDispatcher(db, mailer, appUrl) {
+  let running = null;
+  let again = false;
+  const run = async () => {
     try {
-      await dispatchNotificationEmails(db, mailer, appUrl);
+      do {
+        again = false;
+        await dispatchNotificationEmails(db, mailer, appUrl);
+      } while (again);
     } catch (err) {
       console.error('Notification email dispatch failed:', err.message);
     } finally {
-      running = false;
+      running = null;
     }
   };
-  const timer = setInterval(tick, intervalMs);
+  return () => {
+    if (!mailer.enabled) return Promise.resolve();
+    if (running) {
+      again = true;
+      return running;
+    }
+    running = run();
+    return running;
+  };
+}
+
+// For a long-running server: also sweep every minute (retries, stale claims).
+export function startNotificationEmails(dispatch, mailer, intervalMs = 60_000) {
+  if (!mailer.enabled) return () => {};
+  const timer = setInterval(dispatch, intervalMs);
   timer.unref();
   return () => clearInterval(timer);
 }

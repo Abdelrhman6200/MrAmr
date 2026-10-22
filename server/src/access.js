@@ -6,40 +6,46 @@
 //   they own or are a member of.
 // - Tasks can be assigned to yourself, your reporting line, or any manager
 //   (so e.g. Customer Service can raise a bug with the Product Owner).
+import { bump, readCounter } from './db.js';
 import { isManagerRole, USER_ADMIN_ROLES } from './meta.js';
 
 export const isCeo = (user) => user.role === 'ceo';
 
 export function makeAccess(db) {
-  const allUsers = db.prepare('SELECT id, manager_id, role, active FROM users');
-  const memberOf = db.prepare('SELECT project_id FROM project_members WHERE user_id = ?');
-  const projectById = db.prepare('SELECT id, owner_id FROM projects WHERE id = ?');
-  const isMember = db.prepare('SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?');
-  const ownedBy = db.prepare('SELECT id FROM projects WHERE owner_id IN (SELECT value FROM json_each(?))');
-
-  // The org chart is read once and reused. Every change to users goes through the
-  // users routes, which call invalidate(); the next check rebuilds it.
+  // The org chart is cached in memory. Several server instances may run at once,
+  // so a shared 'org' counter in the database (bumped by every user change) tells
+  // each instance when its copy is stale; sync() checks it once per request.
   let org = null;
-  function orgChart() {
-    if (!org) {
-      const rows = allUsers.all();
-      const children = new Map();
-      for (const r of rows) {
-        if (r.manager_id == null) continue;
-        if (!children.has(r.manager_id)) children.set(r.manager_id, []);
-        children.get(r.manager_id).push(r.id);
-      }
-      org = { rows, children, reports: new Map() };
+  let orgVersion = -1;
+
+  async function sync() {
+    const version = await readCounter(db, 'org');
+    if (org && version === orgVersion) return;
+    const rows = await db.all('SELECT id, manager_id, role, active FROM users');
+    const children = new Map();
+    for (const r of rows) {
+      if (r.manager_id == null) continue;
+      if (!children.has(r.manager_id)) children.set(r.manager_id, []);
+      children.get(r.manager_id).push(r.id);
     }
-    return org;
+    org = { rows, children, reports: new Map() };
+    orgVersion = version;
   }
-  const invalidate = () => {
+
+  // Call inside the transaction that changes users.
+  async function invalidate(q = db) {
+    await bump(q, 'org');
     org = null;
+  }
+
+  const chart = () => {
+    if (!org) throw new Error('access.sync() must run before permission checks');
+    return org;
   };
 
   // Everyone below userId in the org chart. Returned sets are shared: don't mutate.
   function reportsOf(userId) {
-    const { children, reports } = orgChart();
+    const { children, reports } = chart();
     if (reports.has(userId)) return reports.get(userId);
     const out = new Set();
     const stack = [...(children.get(userId) || [])];
@@ -61,79 +67,75 @@ export function makeAccess(db) {
   // Would `newManagerId` as manager of `userId` create a reporting cycle?
   const wouldCycle = (userId, newManagerId) => newManagerId === userId || reportsOf(userId).has(newManagerId);
 
-  function projectIdsFor(user) {
-    const ids = new Set(memberOf.all(user.id).map((r) => r.project_id));
-    const owned = ownedBy.all(JSON.stringify([...teamIds(user)]));
-    for (const r of owned) ids.add(r.id);
-    return ids;
+  const projectById = (id) => db.get('SELECT id, owner_id FROM projects WHERE id = ?', [id]);
+
+  async function projectIdsFor(user) {
+    const rows = await db.all(
+      `SELECT project_id AS id FROM project_members WHERE user_id = ?
+       UNION SELECT id FROM projects WHERE owner_id = ANY(?::int[])`,
+      [user.id, [...teamIds(user)]],
+    );
+    return new Set(rows.map((r) => r.id));
   }
 
   // Returns { sql, params } restricting a `tasks t` query to what the user may see.
-  function taskScope(user) {
-    if (isCeo(user)) return { sql: '1=1', params: [] };
+  async function taskScope(user) {
+    if (isCeo(user)) return { sql: 'TRUE', params: [] };
     const team = [...teamIds(user)];
-    const projects = [...projectIdsFor(user)];
-    const ph = (arr) => (arr.length ? arr.map(() => '?').join(',') : 'NULL');
+    const projects = [...(await projectIdsFor(user))];
     return {
-      sql: `(t.assignee_id IN (${ph(team)}) OR t.reporter_id IN (${ph(team)}) OR t.reviewer_id IN (${ph(team)}) OR t.project_id IN (${ph(projects)}))`,
-      params: [...team, ...team, ...team, ...projects],
+      sql: '(t.assignee_id = ANY(?::int[]) OR t.reporter_id = ANY(?::int[]) OR t.reviewer_id = ANY(?::int[]) OR t.project_id = ANY(?::int[]))',
+      params: [team, team, team, projects],
     };
   }
 
-  function projectScope(user) {
-    if (isCeo(user)) return { sql: '1=1', params: [] };
-    const ids = [...projectIdsFor(user)];
-    return { sql: ids.length ? `p.id IN (${ids.map(() => '?').join(',')})` : '0', params: ids };
+  async function projectScope(user) {
+    if (isCeo(user)) return { sql: 'TRUE', params: [] };
+    return { sql: 'p.id = ANY(?::int[])', params: [[...(await projectIdsFor(user))]] };
   }
 
-  function canViewProject(user, project) {
-    return isCeo(user) || projectIdsFor(user).has(project.id);
+  async function canViewProject(user, project) {
+    return isCeo(user) || (await projectIdsFor(user)).has(project.id);
   }
 
   function canManageProject(user, project) {
     return isCeo(user) || project.owner_id === user.id || reportsOf(user.id).has(project.owner_id);
   }
 
-  function canViewTask(user, task) {
+  async function managesTaskProject(user, task) {
+    if (task.project_id == null) return false;
+    const p = await projectById(task.project_id);
+    return !!p && canManageProject(user, p);
+  }
+
+  async function canViewTask(user, task) {
     if (isCeo(user)) return true;
     const team = teamIds(user);
     if ([task.assignee_id, task.reporter_id, task.reviewer_id].some((id) => id != null && team.has(id))) return true;
-    return task.project_id != null && projectIdsFor(user).has(task.project_id);
+    return task.project_id != null && (await projectIdsFor(user)).has(task.project_id);
   }
 
-  function canEditTask(user, task) {
+  async function canEditTask(user, task) {
     if (isCeo(user)) return true;
     if ([task.assignee_id, task.reporter_id, task.reviewer_id].includes(user.id)) return true;
     const reports = reportsOf(user.id);
     if (reports.has(task.assignee_id) || reports.has(task.reporter_id)) return true;
-    if (task.project_id != null) {
-      const p = projectById.get(task.project_id);
-      if (p && canManageProject(user, p)) return true;
-    }
-    return false;
+    return managesTaskProject(user, task);
   }
 
-  function canDeleteTask(user, task) {
+  async function canDeleteTask(user, task) {
     if (isCeo(user) || task.reporter_id === user.id || reportsOf(user.id).has(task.reporter_id)) return true;
-    if (task.project_id != null) {
-      const p = projectById.get(task.project_id);
-      if (p && canManageProject(user, p)) return true;
-    }
-    return false;
+    return managesTaskProject(user, task);
   }
 
   // Who may change or remove a task's reviewer once one is set. The assignee alone
   // may not, otherwise they could drop the review and mark their own work done.
   // Adding a reviewer to a task without one only needs edit rights.
-  function canChangeReviewer(user, task) {
+  async function canChangeReviewer(user, task) {
     if (task.reviewer_id == null) return canEditTask(user, task);
     if (isCeo(user) || task.reporter_id === user.id || task.reviewer_id === user.id) return true;
     if (task.assignee_id != null && reportsOf(user.id).has(task.assignee_id)) return true;
-    if (task.project_id != null) {
-      const p = projectById.get(task.project_id);
-      if (p && canManageProject(user, p)) return true;
-    }
-    return false;
+    return managesTaskProject(user, task);
   }
 
   // Reviewer can approve; so can anyone managing the reviewer or the CEO.
@@ -142,25 +144,27 @@ export function makeAccess(db) {
     return isCeo(user) || task.reviewer_id === user.id || reportsOf(user.id).has(task.reviewer_id);
   }
 
-  function assignableIds(user, projectId = null) {
-    const rows = orgChart().rows.filter((r) => r.active);
-    if (isCeo(user)) return new Set(rows.map((r) => r.id));
+  async function assignableIds(user, projectId = null) {
+    const rows = chart().rows.filter((r) => r.active);
+    const active = new Set(rows.map((r) => r.id));
+    if (isCeo(user)) return active;
     const ids = teamIds(user);
     for (const r of rows) if (isManagerRole(r.role)) ids.add(r.id);
     if (projectId != null) {
-      const p = projectById.get(projectId);
-      if (p && (p.owner_id === user.id || isMember.get(projectId, user.id) || canManageProject(user, p))) {
-        for (const r of db.prepare('SELECT user_id FROM project_members WHERE project_id = ?').all(projectId)) ids.add(r.user_id);
+      const p = await projectById(projectId);
+      const member = p && (await db.get('SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?', [projectId, user.id]));
+      if (p && (p.owner_id === user.id || member || canManageProject(user, p))) {
+        for (const r of await db.all('SELECT user_id FROM project_members WHERE project_id = ?', [projectId])) ids.add(r.user_id);
         ids.add(p.owner_id);
       }
     }
-    const active = new Set(rows.map((r) => r.id));
     return new Set([...ids].filter((id) => active.has(id)));
   }
 
   const canAdminUsers = (user) => USER_ADMIN_ROLES.includes(user.role);
 
   return {
+    sync,
     invalidate,
     reportsOf,
     teamIds,

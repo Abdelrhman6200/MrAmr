@@ -424,7 +424,7 @@ export default function Users() {
             className="btn"
             onClick={() =>
               api
-                .download('/admin/backup', 'taskflow-backup.db')
+                .download('/admin/backup', 'taskflow-backup.json')
                 .then(() => notify(t('users.backupDone'), 'success'))
                 .catch((e) => notify(e.message, 'error'))
             }

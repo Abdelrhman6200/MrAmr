@@ -34,10 +34,18 @@ export function oneOf(value, allowed, field) {
   return value;
 }
 
+const MAX_ID = 2147483647; // Postgres INTEGER
+
 export function optionalId(value, field) {
   if (value === undefined) return undefined;
   if (value === null || value === '') return null;
   const n = Number(value);
-  if (!Number.isInteger(n) || n <= 0) throw badRequest(`${field} must be an id`);
+  if (!Number.isInteger(n) || n <= 0 || n > MAX_ID) throw badRequest(`${field} must be an id`);
   return n;
+}
+
+// An id from the URL; anything that can't be an id becomes 0, which matches no row.
+export function idParam(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 && n <= MAX_ID ? n : 0;
 }
