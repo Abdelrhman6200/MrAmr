@@ -38,6 +38,8 @@ const en = {
   'nav.signOut': 'Sign out',
   'nav.menu': 'Menu',
   'nav.admin': 'Admin',
+  'review.approvedPrefix': '✅ Approved',
+  'review.changesPrefix': '🔁 Changes requested',
   'tasks.clearFilters': 'Clear filters',
   'nav.search': 'Search tasks…',
 
@@ -631,6 +633,8 @@ const ar = {
   'nav.signOut': 'تسجيل الخروج',
   'nav.menu': 'القائمة',
   'nav.admin': 'الإدارة',
+  'review.approvedPrefix': '✅ تمت الموافقة',
+  'review.changesPrefix': '🔁 مطلوب تعديلات',
   'tasks.clearFilters': 'مسح عوامل التصفية',
   'nav.search': 'ابحث في المهام…',
 

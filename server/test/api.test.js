@@ -153,3 +153,12 @@ test('checklist, comments and dashboard', async () => {
   const reports = (await api('ceo', 'GET', '/dashboard/reports')).body;
   assert.ok(reports.byDepartment.length >= 5);
 });
+
+test('review comments are written in the reviewer’s language', async () => {
+  const t = (await api('ins1', 'POST', '/tasks', { title: 'Arabic review', reviewer_id: ids.cq, status: 'in_review' })).body;
+  assert.equal((await api('cq', 'PATCH', `/users/${ids.cq}`, { language: 'ar' })).status, 200);
+  assert.equal((await api('cq', 'POST', `/tasks/${t.id}/review`, { decision: 'changes', comment: 'أضف مثالًا' })).status, 200);
+  const detail = (await api('ins1', 'GET', `/tasks/${t.id}`)).body;
+  assert.equal(detail.comments.at(-1).body, '🔁 مطلوب تعديلات: أضف مثالًا');
+  await api('cq', 'PATCH', `/users/${ids.cq}`, { language: 'en' });
+});

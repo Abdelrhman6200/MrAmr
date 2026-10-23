@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { badRequest, forbidden, idParam, notFound, oneOf, optionalDate, optionalId, requiredString } from '../http.js';
 import { PRIORITIES, ROLES, STATUSES, TASK_TYPES, keys } from '../meta.js';
 import { localDate, nowUtc } from '../time.js';
+import { translate } from '../../../client/src/i18n.js';
 
 export const TASK_SELECT = `
   SELECT t.*, p.name AS project_name, p.color AS project_color,
@@ -336,7 +337,9 @@ export default function taskRoutes({ db, access }) {
         await notify(tx, req.user, t.assignee_id, 'changes_requested', `${req.user.name} requested changes on "${t.title}"`, t.id, t.title);
       }
       if (comment) {
-        const prefix = decision === 'approve' ? '✅ Approved' : '🔁 Changes requested';
+        // Written in the reviewer's language, like the rest of what they type.
+        const lang = req.user.language === 'ar' ? 'ar' : 'en';
+        const prefix = translate(lang, decision === 'approve' ? 'review.approvedPrefix' : 'review.changesPrefix');
         await tx.run('INSERT INTO comments (task_id, user_id, body) VALUES (?, ?, ?)', [t.id, req.user.id, `${prefix}: ${comment}`]);
       }
     });
