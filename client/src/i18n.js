@@ -38,6 +38,7 @@ const en = {
   'nav.signOut': 'Sign out',
   'nav.menu': 'Menu',
   'nav.admin': 'Admin',
+  'tasks.clearFilters': 'Clear filters',
   'nav.search': 'Search tasks…',
 
   'login.email': 'Email',
@@ -630,6 +631,7 @@ const ar = {
   'nav.signOut': 'تسجيل الخروج',
   'nav.menu': 'القائمة',
   'nav.admin': 'الإدارة',
+  'tasks.clearFilters': 'مسح عوامل التصفية',
   'nav.search': 'ابحث في المهام…',
 
   'login.email': 'البريد الإلكتروني',

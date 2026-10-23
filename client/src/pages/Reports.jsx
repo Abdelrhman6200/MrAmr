@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { DeptTag, Progress, Spinner } from '../components/ui.jsx';
+import Icon from '../components/Icon.jsx';
 
 const STATUS_COLORS = { todo: '#94a3b8', in_progress: '#3b82f6', blocked: '#ef4444', in_review: '#a855f7', done: '#22c55e' };
 const PRIORITY_COLORS = { urgent: '#dc2626', high: '#f97316', medium: '#eab308', low: '#94a3b8' };
@@ -74,19 +75,39 @@ export default function Reports() {
       <div className="stats">
         <div className="stat">
           <div className="stat-value">{data.total}</div>
-          <div className="stat-label">{t('rep.total')}</div>
+          <div className="stat-label">
+            <span className="stat-icon">
+              <Icon name="tasks" size={15} />
+            </span>
+            {t('rep.total')}
+          </div>
         </div>
         <div className="stat success">
           <div className="stat-value">{data.total ? Math.round((done / data.total) * 100) : 0}%</div>
-          <div className="stat-label">{t('rep.completion')}</div>
+          <div className="stat-label">
+            <span className="stat-icon">
+              <Icon name="done" size={15} />
+            </span>
+            {t('rep.completion')}
+          </div>
         </div>
         <div className="stat danger">
           <div className="stat-value">{data.byDepartment.reduce((s, d) => s + d.overdue, 0)}</div>
-          <div className="stat-label">{t('rep.overdue')}</div>
+          <div className="stat-label">
+            <span className="stat-icon">
+              <Icon name="clock" size={15} />
+            </span>
+            {t('rep.overdue')}
+          </div>
         </div>
         <div className="stat warn">
           <div className="stat-value">{data.byStatus.blocked || 0}</div>
-          <div className="stat-label">{t('rep.blocked')}</div>
+          <div className="stat-label">
+            <span className="stat-icon">
+              <Icon name="ban" size={15} />
+            </span>
+            {t('rep.blocked')}
+          </div>
         </div>
       </div>
       <div className="dash-grid">

@@ -69,7 +69,14 @@ export default function Tasks() {
         </div>
       </div>
       <TaskFilters filters={filters} setFilters={setFilters} projects={projects} people={users} />
-      <div className="muted sm results">{loading ? t('common.loading') : t('tasks.count', { n: tasks.length })}</div>
+      <div className="muted sm results">
+        {loading ? t('common.loading') : t('tasks.count', { n: tasks.length })}
+        {Object.keys(filters).length > 0 && (
+          <button className="link" onClick={() => setFilters({})}>
+            {t('tasks.clearFilters')}
+          </button>
+        )}
+      </div>
       {view === 'board' ? (
         <Board tasks={tasks} onChanged={refresh} newTaskDefaults={{ project_id: filters.project_id && filters.project_id !== 'none' ? filters.project_id : null }} />
       ) : (

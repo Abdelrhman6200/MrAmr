@@ -146,7 +146,7 @@ function CallCard({ call, onOpen, onLogged, showLog }) {
           </a>
         )}
         {call.status === 'callback' && call.callback_at && (
-          <span className={`sm ${isDue(call) ? 'text-danger' : 'muted'}`}>
+          <span className={`sm with-icon ${isDue(call) ? 'text-danger' : 'muted'}`}>
             <Icon name="clock" size={14} /> {t('calls.callbackAt')}: {formatDateTime(call.callback_at)}
           </span>
         )}
@@ -187,19 +187,39 @@ function MyQueue({ onOpen }) {
       <div className="stats">
         <div className="stat">
           <div className="stat-value">{open}</div>
-          <div className="stat-label">{t('calls.queueOpen')}</div>
+          <div className="stat-label">
+            <span className="stat-icon">
+              <Icon name="calls" size={15} />
+            </span>
+            {t('calls.queueOpen')}
+          </div>
         </div>
         <div className={`stat ${due ? 'danger' : ''}`}>
           <div className="stat-value">{due}</div>
-          <div className="stat-label">{t('calls.callbacksDue')}</div>
+          <div className="stat-label">
+            <span className="stat-icon">
+              <Icon name="clock" size={15} />
+            </span>
+            {t('calls.callbacksDue')}
+          </div>
         </div>
         <div className="stat info">
           <div className="stat-value">{data.loggedToday}</div>
-          <div className="stat-label">{t('calls.loggedToday')}</div>
+          <div className="stat-label">
+            <span className="stat-icon">
+              <Icon name="checklist" size={15} />
+            </span>
+            {t('calls.loggedToday')}
+          </div>
         </div>
         <div className="stat success">
           <div className="stat-value">{c.reached || 0}</div>
-          <div className="stat-label">{callStatusLabel('reached')}</div>
+          <div className="stat-label">
+            <span className="stat-icon">
+              <Icon name="done" size={15} />
+            </span>
+            {callStatusLabel('reached')}
+          </div>
         </div>
       </div>
       <div className="seg">

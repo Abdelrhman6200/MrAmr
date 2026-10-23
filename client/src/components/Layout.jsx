@@ -143,6 +143,12 @@ export default function Layout({ children }) {
   const [menu, setMenu] = useState(false);
   const location = useLocation();
   useEffect(() => setMenu(false), [location.pathname]);
+  // Browser tab: "Tasks · TaskFlow".
+  useEffect(() => {
+    const section = location.pathname.split('/')[1];
+    const item = [...NAV, { to: '/users', key: 'nav.users' }, { to: '/settings', key: 'settings.title' }].find((n) => n.to === `/${section}`);
+    document.title = item ? `${t(item.key)} · TaskFlow` : 'TaskFlow';
+  }, [location.pathname, t]);
 
   return (
     <div className={`shell ${menu ? 'menu-open' : ''}`}>
