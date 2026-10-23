@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../context.jsx';
 import { Avatar, DeptTag } from '../components/ui.jsx';
+import Icon from '../components/Icon.jsx';
 
 function Node({ user, childrenOf, depth = 0 }) {
   const { roleLabel, deptOf, user: me, t } = useApp();
@@ -12,7 +13,7 @@ function Node({ user, childrenOf, depth = 0 }) {
       <div className={`org-node ${user.id === me.id ? 'me' : ''}`}>
         {kids.length > 0 ? (
           <button className="icon-btn sm" onClick={() => setOpen((o) => !o)} aria-label={open ? t('team.collapse') : t('team.expand')}>
-            {open ? '▾' : <span className="flip">▸</span>}
+            {open ? <Icon name="chevron" size={14} /> : <Icon name="next" size={14} className="flip" />}
           </button>
         ) : (
           <span className="spacer" />

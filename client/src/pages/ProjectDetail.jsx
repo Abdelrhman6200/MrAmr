@@ -4,8 +4,9 @@ import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { ActivityText } from '../components/TaskDetail.jsx';
 import { Board, TaskFilters, TaskTable } from '../components/TaskViews.jsx';
-import { Avatar, DeptTag, Progress, formatDate, timeAgo, useTaskDialog } from '../components/ui.jsx';
+import { Avatar, DeptTag, Progress, formatDate, timeAgo, useTaskDialog, Spinner } from '../components/ui.jsx';
 import { ProjectForm } from './Projects.jsx';
+import Icon from '../components/Icon.jsx';
 
 export default function ProjectDetail() {
   const { id } = useParams();
@@ -34,10 +35,10 @@ export default function ProjectDetail() {
     return (
       <div className="page">
         <div className="alert error">{error}</div>
-        <Link to="/projects">{t('proj.back')}</Link>
+        <Link to="/projects"><Icon name="back" className="flip" />{t('proj.back')}</Link>
       </div>
     );
-  if (!project) return <div className="muted">{t('common.loading')}</div>;
+  if (!project) return <Spinner />;
 
   const remove = async () => {
     if (!confirm(t('proj.confirmDelete', { name: project.name }))) return;
@@ -50,7 +51,7 @@ export default function ProjectDetail() {
   return (
     <div className="page">
       <Link to="/projects" className="muted sm">
-        {t('proj.back')}
+        <Icon name="back" className="flip" />{t('proj.back')}
       </Link>
       <div className="page-head">
         <div>
@@ -76,7 +77,7 @@ export default function ProjectDetail() {
             </>
           )}
           <button className="btn primary" onClick={() => create({ project_id: project.id })}>
-            {t('proj.addTask')}
+            <Icon name="plus" />{t('proj.addTask')}
           </button>
         </div>
       </div>

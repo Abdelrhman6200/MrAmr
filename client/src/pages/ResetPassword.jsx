@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
-import { LanguageSwitch } from '../components/Layout.jsx';
+import AuthShell from '../components/AuthShell.jsx';
 
 export default function ResetPassword() {
   const { t, signIn } = useApp();
@@ -41,15 +41,11 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="login">
+    <AuthShell>
       <form className="login-card" onSubmit={submit}>
-        <div className="row between wrap gap">
-          <div className="brand big">
-            <span className="logo">✓</span> TaskFlow
-          </div>
-          <LanguageSwitch />
+        <div className="auth-heading">
+          <h2>{t('reset.title')}</h2>
         </div>
-        <h2 style={{ margin: 0 }}>{t('reset.title')}</h2>
         {invalid ? (
           <div className="alert error">{t('reset.invalid')}</div>
         ) : (
@@ -74,6 +70,6 @@ export default function ResetPassword() {
           {t('login.back')}
         </button>
       </form>
-    </div>
+    </AuthShell>
   );
 }

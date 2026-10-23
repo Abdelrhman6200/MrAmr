@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { Avatar, DueDate, Empty, PriorityTag, StatusPill, TypeTag, useTaskDialog } from './ui.jsx';
+import Icon from './Icon.jsx';
 
 export function TaskCard({ task, draggable, compact }) {
   const { open } = useTaskDialog();
@@ -31,11 +32,19 @@ export function TaskCard({ task, draggable, compact }) {
         <span className="card-icons muted">
           {task.checklist_total > 0 && (
             <span title={t('tasks.checklist')}>
-              ☑ {task.checklist_done}/{task.checklist_total}
+              <Icon name="checklist" size={13} /> {task.checklist_done}/{task.checklist_total}
             </span>
           )}
-          {task.comment_count > 0 && <span title={t('tasks.comments')}>💬 {task.comment_count}</span>}
-          {task.reviewer_name && <span title={`${t('tasks.reviewer')}: ${task.reviewer_name}`}>👁</span>}
+          {task.comment_count > 0 && (
+            <span title={t('tasks.comments')}>
+              <Icon name="comment" size={13} /> {task.comment_count}
+            </span>
+          )}
+          {task.reviewer_name && (
+            <span title={`${t('tasks.reviewer')}: ${task.reviewer_name}`}>
+              <Icon name="eye" size={13} />
+            </span>
+          )}
         </span>
         {task.assignee_name ? <Avatar name={task.assignee_name} color={task.assignee_color} size={24} /> : <span className="avatar empty-avatar">?</span>}
       </div>
@@ -123,8 +132,16 @@ export function TaskTable({ tasks, hideProject }) {
                 <div className="cell-title">{task.title}</div>
                 <div className="muted sm">
                   <TypeTag type={task.type} />
-                  {task.checklist_total > 0 && ` ☑ ${task.checklist_done}/${task.checklist_total}`}
-                  {task.comment_count > 0 && ` 💬 ${task.comment_count}`}
+                  {task.checklist_total > 0 && (
+                    <span className="inline-meta">
+                      <Icon name="checklist" size={13} /> {task.checklist_done}/{task.checklist_total}
+                    </span>
+                  )}
+                  {task.comment_count > 0 && (
+                    <span className="inline-meta">
+                      <Icon name="comment" size={13} /> {task.comment_count}
+                    </span>
+                  )}
                 </div>
               </td>
               {!hideProject && (

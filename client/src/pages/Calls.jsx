@@ -4,7 +4,8 @@ import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { download, guessColumns, readSpreadsheet, toCsv } from '../sheet.js';
 import { parseServerTime } from '../time.js';
-import { Avatar, CallStatusPill, Empty, Modal, Progress, formatDate, formatDateTime, timeAgo } from '../components/ui.jsx';
+import { Avatar, CallStatusPill, Empty, Modal, Progress, formatDate, formatDateTime, timeAgo, Spinner } from '../components/ui.jsx';
+import Icon from '../components/Icon.jsx';
 
 // Splits rows into requests of at most 1000 rows and well under 4 MB each.
 function chunkRows(rows, maxRows = 1000, maxBytes = 800_000) {
@@ -141,12 +142,12 @@ function CallCard({ call, onOpen, onLogged, showLog }) {
       <div className="row gap wrap">
         {call.phone && (
           <a className="btn call-btn" href={`tel:${call.phone.replace(/[^\d+]/g, '')}`} onClick={(e) => e.stopPropagation()} dir="ltr">
-            {t('calls.callNow')} {call.phone}
+            <Icon name="calls" />{t('calls.callNow')} {call.phone}
           </a>
         )}
         {call.status === 'callback' && call.callback_at && (
           <span className={`sm ${isDue(call) ? 'text-danger' : 'muted'}`}>
-            ⏰ {t('calls.callbackAt')}: {formatDateTime(call.callback_at)}
+            <Icon name="clock" size={14} /> {t('calls.callbackAt')}: {formatDateTime(call.callback_at)}
           </span>
         )}
         {call.attempts > 0 && (
@@ -156,7 +157,11 @@ function CallCard({ call, onOpen, onLogged, showLog }) {
         )}
       </div>
       <ExtraFields call={call} limit={4} />
-      {call.notes && <div className="call-note">📝 {call.notes}</div>}
+      {call.notes && (
+        <div className="call-note">
+          <Icon name="note" size={14} /> {call.notes}
+        </div>
+      )}
       {showLog && <LogForm call={call} onLogged={onLogged} />}
     </div>
   );
@@ -172,7 +177,7 @@ function MyQueue({ onOpen }) {
     api.get('/calls/mine', { status: mode === 'done' ? 'done' : '' }).then(setData);
   }, [mode, version]);
 
-  if (!data) return <div className="muted">{t('common.loading')}</div>;
+  if (!data) return <Spinner />;
   const c = data.counts;
   const open = (c.pending || 0) + (c.no_answer || 0) + (c.callback || 0);
   const due = mode === 'open' ? data.calls.filter(isDue).length : 0;
@@ -206,7 +211,7 @@ function MyQueue({ onOpen }) {
         </button>
       </div>
       {data.calls.length === 0 ? (
-        <Empty icon="☎">{t('calls.queueEmpty')}</Empty>
+        <Empty icon="calls">{t('calls.queueEmpty')}</Empty>
       ) : (
         <div className="call-grid">
           {data.calls.map((call) => (
@@ -534,7 +539,7 @@ function Lists({ agents, onOpenList }) {
   useEffect(() => {
     api.get('/calls/lists').then(setData);
   }, [version]);
-  if (!data) return <div className="muted">{t('common.loading')}</div>;
+  if (!data) return <Spinner />;
 
   return (
     <>
@@ -542,10 +547,10 @@ function Lists({ agents, onOpenList }) {
       <div className="row between wrap gap">
         <div />
         <button className="btn primary" onClick={() => setUploading(true)}>
-          {t('calls.upload')}
+          <Icon name="upload" />{t('calls.upload')}
         </button>
       </div>
-      {data.lists.length === 0 && <Empty icon="⬆">{t('calls.noLists')}</Empty>}
+      {data.lists.length === 0 && <Empty icon="upload">{t('calls.noLists')}</Empty>}
       <div className="project-grid">
         {data.lists.map((l) => (
           <button key={l.id} className="card project-card list-card" style={{ '--c': 'var(--accent)' }} onClick={() => onOpenList(l.id)}>
@@ -606,11 +611,11 @@ function ListDetail({ id, agents, onOpen, onBack }) {
       <div className="page">
         <div className="alert error">{error}</div>
         <button className="link" onClick={onBack}>
-          {t('calls.back')}
+          <Icon name="back" className="flip" />{t('calls.back')}
         </button>
       </div>
     );
-  if (!list) return <div className="muted">{t('common.loading')}</div>;
+  if (!list) return <Spinner />;
 
   const total = Object.values(list.byStatus).reduce((a, b) => a + b, 0);
   const allSelected = list.calls.length > 0 && selected.length === list.calls.length;
@@ -643,7 +648,7 @@ function ListDetail({ id, agents, onOpen, onBack }) {
   return (
     <div className="page">
       <button className="link sm back-link" onClick={onBack}>
-        {t('calls.back')}
+        <Icon name="back" className="flip" />{t('calls.back')}
       </button>
       <div className="page-head">
         <div>
@@ -651,12 +656,12 @@ function ListDetail({ id, agents, onOpen, onBack }) {
           {list.description && <p className="muted">{list.description}</p>}
           <div className="muted sm">
             {t('calls.uploadedBy', { name: list.created_by_name })} · {formatDate(list.created_at)}
-            {list.source_filename && <> · 📄 {list.source_filename}</>}
+            {list.source_filename && <> · {list.source_filename}</>}
           </div>
         </div>
         <div className="row gap wrap">
           <button className="btn" onClick={exportCsv}>
-            {t('calls.export')}
+            <Icon name="download" />{t('calls.export')}
           </button>
           {list.can_assign && list.calls.some((c) => !c.assignee_id) && (
             <button className="btn primary" onClick={() => setAssigning({ callIds: null })}>
@@ -805,7 +810,7 @@ function ListDetail({ id, agents, onOpen, onBack }) {
                   </td>
                   <td>
                     <CallStatusPill status={c.status} />
-                    {c.status === 'callback' && c.callback_at && <div className={`sm ${isDue(c) ? 'text-danger' : 'muted'}`}>⏰ {formatDateTime(c.callback_at)}</div>}
+                    {c.status === 'callback' && c.callback_at && <div className={`sm inline-meta ${isDue(c) ? 'text-danger' : 'muted'}`}><Icon name="clock" size={13} /> {formatDateTime(c.callback_at)}</div>}
                   </td>
                   <td>{c.attempts}</td>
                   <td className="muted sm">{c.last_called_at ? timeAgo(c.last_called_at) : '—'}</td>
@@ -871,12 +876,12 @@ function CallDialog({ id, agents, onClose }) {
             <div className="row gap wrap">
               {call.phone && (
                 <a className="btn call-btn" href={`tel:${call.phone.replace(/[^\d+]/g, '')}`} dir="ltr">
-                  {t('calls.callNow')} {call.phone}
+                  <Icon name="calls" />{t('calls.callNow')} {call.phone}
                 </a>
               )}
               {call.email && (
                 <a className="btn" href={`mailto:${call.email}`} dir="ltr">
-                  ✉ {call.email}
+                  <Icon name="mail" size={14} /> {call.email}
                 </a>
               )}
             </div>

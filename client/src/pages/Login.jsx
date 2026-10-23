@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
-import { LanguageSwitch } from '../components/Layout.jsx';
+import AuthShell from '../components/AuthShell.jsx';
 
 const DEMO = [
   ['ceo', 'ceo@taskflow.local'],
@@ -45,19 +45,20 @@ export default function Login() {
   };
 
   return (
-    <div className="login">
+    <AuthShell>
       <form className="login-card" onSubmit={submit}>
-        <div className="row between wrap gap">
-          <div className="brand big">
-            <span className="logo">✓</span> TaskFlow
+        {!forgot && (
+          <div className="auth-heading">
+            <h2>{t('auth.welcome')}</h2>
+            <p className="muted">{t('auth.welcomeHint')}</p>
           </div>
-          <LanguageSwitch />
-        </div>
-        <p className="muted">{t('app.tagline')}</p>
+        )}
         {error && <div className="alert error">{error}</div>}
         {forgot ? (
           <>
-            <h2 style={{ margin: 0 }}>{t('login.forgotTitle')}</h2>
+            <div className="auth-heading">
+              <h2>{t('login.forgotTitle')}</h2>
+            </div>
             {!meta.resetByEmail ? (
               <div className="alert info">{t('login.noEmail')}</div>
             ) : sent ? (
@@ -116,6 +117,6 @@ export default function Login() {
         </details>
         )}
       </form>
-    </div>
+    </AuthShell>
   );
 }

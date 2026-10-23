@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
-import { DeptTag, Progress } from '../components/ui.jsx';
+import { DeptTag, Progress, Spinner } from '../components/ui.jsx';
 
 const STATUS_COLORS = { todo: '#94a3b8', in_progress: '#3b82f6', blocked: '#ef4444', in_review: '#a855f7', done: '#22c55e' };
 const PRIORITY_COLORS = { urgent: '#dc2626', high: '#f97316', medium: '#eab308', low: '#94a3b8' };
@@ -58,7 +58,7 @@ export default function Reports() {
   useEffect(() => {
     api.get('/dashboard/reports').then(setData);
   }, [version]);
-  if (!data) return <div className="muted">{t('common.loading')}</div>;
+  if (!data) return <Spinner />;
 
   const label = (list, fn) => Object.fromEntries(list.map((x) => [x.key, fn(x.key)]));
   const done = data.byStatus.done || 0;

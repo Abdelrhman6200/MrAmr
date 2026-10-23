@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
-import { LanguageSwitch } from '../components/Layout.jsx';
+import AuthShell from '../components/AuthShell.jsx';
 
 // First run on a new deployment: create the Head of Company account.
 export default function Setup() {
@@ -27,15 +27,11 @@ export default function Setup() {
   };
 
   return (
-    <div className="login">
+    <AuthShell>
       <form className="login-card" onSubmit={submit}>
-        <div className="row between wrap gap">
-          <div className="brand big">
-            <span className="logo">✓</span> TaskFlow
-          </div>
-          <LanguageSwitch />
+        <div className="auth-heading">
+          <h2>{t('setup.title')}</h2>
         </div>
-        <h2 style={{ margin: 0 }}>{t('setup.title')}</h2>
         <p className="muted">{t('setup.body')}</p>
         {error && <div className="alert error">{error}</div>}
         <label>
@@ -55,6 +51,6 @@ export default function Setup() {
         </button>
         <div className="alert info sm">{t('setup.note')}</div>
       </form>
-    </div>
+    </AuthShell>
   );
 }

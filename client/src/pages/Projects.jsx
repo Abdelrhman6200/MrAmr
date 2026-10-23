@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { Avatar, DeptTag, Empty, Modal, Progress, UserSelect, formatDate } from '../components/ui.jsx';
+import Icon from '../components/Icon.jsx';
 
 export function ProjectForm({ project, onClose, onSaved }) {
   const { meta, user, users, deptOf, t, deptLabel, projectStatusLabel } = useApp();
@@ -142,7 +143,7 @@ export default function Projects() {
         <h1>{t('proj.title')}</h1>
         {isManager && (
           <button className="btn primary" onClick={() => setCreating(true)}>
-            {t('proj.new')}
+            <Icon name="plus" />{t('proj.new')}
           </button>
         )}
       </div>
@@ -159,7 +160,7 @@ export default function Projects() {
           <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> {t('proj.showArchived')}
         </label>
       </div>
-      {projects && projects.length === 0 && <Empty icon="▤">{isManager ? t('proj.emptyManager') : t('proj.emptyMember')}</Empty>}
+      {projects && projects.length === 0 && <Empty icon="projects">{isManager ? t('proj.emptyManager') : t('proj.emptyMember')}</Empty>}
       <div className="project-grid">
         {projects?.map((p) => (
           <Link key={p.id} to={`/projects/${p.id}`} className="card project-card" style={{ '--c': p.color }}>

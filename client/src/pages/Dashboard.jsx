@@ -4,13 +4,21 @@ import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { ActivityText } from '../components/TaskDetail.jsx';
 import { TaskCard } from '../components/TaskViews.jsx';
-import { Avatar, Empty, formatDate, timeAgo, todayISO } from '../components/ui.jsx';
+import { Avatar, Empty, formatDate, timeAgo, todayISO, Spinner } from '../components/ui.jsx';
+import Icon from '../components/Icon.jsx';
 
-function Stat({ label, value, tone, to }) {
+function Stat({ label, value, tone, to, icon }) {
   const body = (
     <>
       <div className="stat-value">{value ?? 0}</div>
-      <div className="stat-label">{label}</div>
+      <div className="stat-label">
+        {icon && (
+          <span className="stat-icon">
+            <Icon name={icon} size={15} />
+          </span>
+        )}
+        {label}
+      </div>
     </>
   );
   return to ? (
@@ -41,7 +49,7 @@ export default function Dashboard() {
     }
   }, [version, canUseCalls, user.role]);
 
-  if (!data) return <div className="muted">{t('common.loading')}</div>;
+  if (!data) return <Spinner />;
   const c = data.counts;
   const open = (c.todo || 0) + (c.in_progress || 0) + (c.blocked || 0) + (c.in_review || 0);
   const hour = new Date().getHours();
@@ -58,19 +66,19 @@ export default function Dashboard() {
 
       {pendingRound && (
         <Link to="/centers?tab=mine" className="alert warning banner">
-          🗓 {t('notif.availability_reminder', { title: pendingRound.title })}
+          <Icon name="calendar" size={16} /> {t('notif.availability_reminder', { title: pendingRound.title })}
           {pendingRound.due_date && <> · {t('avail.dueOn', { date: formatDate(pendingRound.due_date) })}</>} →
         </Link>
       )}
 
       <div className="stats">
-        <Stat label={t('dash.open')} value={open} to="/tasks?scope=mine" />
-        <Stat label={t('dash.inProgress')} value={c.in_progress} />
-        <Stat label={t('dash.overdue')} value={data.overdue.length} tone={data.overdue.length ? 'danger' : ''} to="/tasks?scope=mine&due=overdue" />
-        <Stat label={t('dash.blocked')} value={c.blocked} tone={c.blocked ? 'warn' : ''} />
-        <Stat label={t('dash.toReview')} value={data.reviewQueue.length} tone={data.reviewQueue.length ? 'info' : ''} to="/tasks?scope=review" />
-        <Stat label={t('dash.done')} value={c.done} tone="success" />
-        {calls && <Stat label={t('dash.myCalls')} value={calls.calls.length} tone="info" to="/calls" />}
+        <Stat icon="tasks" label={t('dash.open')} value={open} to="/tasks?scope=mine" />
+        <Stat icon="progress" label={t('dash.inProgress')} value={c.in_progress} />
+        <Stat icon="clock" label={t('dash.overdue')} value={data.overdue.length} tone={data.overdue.length ? 'danger' : ''} to="/tasks?scope=mine&due=overdue" />
+        <Stat icon="ban" label={t('dash.blocked')} value={c.blocked} tone={c.blocked ? 'warn' : ''} />
+        <Stat icon="eye" label={t('dash.toReview')} value={data.reviewQueue.length} tone={data.reviewQueue.length ? 'info' : ''} to="/tasks?scope=review" />
+        <Stat icon="done" label={t('dash.done')} value={c.done} tone="success" />
+        {calls && <Stat icon="calls" label={t('dash.myCalls')} value={calls.calls.length} tone="info" to="/calls" />}
       </div>
 
       <div className="dash-grid">
@@ -120,7 +128,7 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-            <Empty icon="↗">{t('dash.waitingEmpty')}</Empty>
+            <Empty icon="clock">{t('dash.waitingEmpty')}</Empty>
           )}
         </section>
 
@@ -162,7 +170,7 @@ export default function Dashboard() {
                 </tbody>
               </table>
             ) : (
-              <Empty icon="☷">{t('dash.noReports')}</Empty>
+              <Empty icon="team">{t('dash.noReports')}</Empty>
             )}
           </section>
         )}

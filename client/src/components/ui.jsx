@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useApp } from '../context.jsx';
 import { getActiveLocale } from '../i18n.js';
 import { parseServerTime } from '../time.js';
+import Icon from './Icon.jsx';
 
 export const initials = (name = '') =>
   name
@@ -104,7 +105,7 @@ export function Modal({ title, onClose, children, wide, footer }) {
         <header className="modal-head">
           <h2>{title}</h2>
           <button className="icon-btn" onClick={onClose} aria-label={t('common.close')}>
-            ✕
+            <Icon name="close" />
           </button>
         </header>
         <div className="modal-body">{children}</div>
@@ -114,11 +115,21 @@ export function Modal({ title, onClose, children, wide, footer }) {
   );
 }
 
-export function Empty({ children, icon = '✓' }) {
+// `icon`: an Icon name (or any node).
+export function Empty({ children, icon = 'done' }) {
   return (
     <div className="empty">
-      <div className="empty-icon">{icon}</div>
+      <div className="empty-icon">{typeof icon === 'string' && icon.length > 2 ? <Icon name={icon} size={22} /> : icon}</div>
       <div>{children}</div>
+    </div>
+  );
+}
+
+export function Spinner({ label }) {
+  return (
+    <div className="spinner-wrap" role="status" aria-live="polite">
+      <span className="spinner" />
+      {label && <span className="muted">{label}</span>}
     </div>
   );
 }

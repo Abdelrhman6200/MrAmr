@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { Avatar, Modal, PriorityTag, StatusPill, TypeTag, UserSelect, isOverdue, timeAgo, useTaskDialog } from './ui.jsx';
+import Icon from './Icon.jsx';
 
 function ReviewBox({ task, onDone }) {
   const [comment, setComment] = useState('');
@@ -27,10 +28,10 @@ function ReviewBox({ task, onDone }) {
       {error && <div className="alert error">{error}</div>}
       <div className="row gap">
         <button className="btn success" onClick={() => send('approve')}>
-          {t('task.approve')}
+          <Icon name="check" />{t('task.approve')}
         </button>
         <button className="btn warn" onClick={() => send('changes')}>
-          {t('task.requestChanges')}
+          <Icon name="undo" />{t('task.requestChanges')}
         </button>
       </div>
     </div>
@@ -183,7 +184,7 @@ export default function TaskDetail({ id }) {
                   </label>
                   {!ro && (
                     <button className="icon-btn sm" onClick={() => api.del(`/tasks/${task.id}/checklist/${c.id}`).then(refresh)} aria-label={t('task.removeItem')}>
-                      ✕
+                      <Icon name="close" size={14} />
                     </button>
                   )}
                 </li>

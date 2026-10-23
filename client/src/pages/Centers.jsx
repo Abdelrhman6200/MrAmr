@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
-import { Avatar, Empty, Modal, formatDate, timeAgo } from '../components/ui.jsx';
+import { Avatar, Empty, Modal, formatDate, timeAgo, Spinner } from '../components/ui.jsx';
 import { download, toCsv } from '../sheet.js';
+import Icon from '../components/Icon.jsx';
 
 const WARNINGS = ['center_full', 'no_availability', 'outside_availability', 'max_sessions'];
 const overlaps = (a, b) => a.start_time < b.end_time && b.start_time < a.end_time;
@@ -323,7 +324,7 @@ function CenterSheet({ center, onClose }) {
               {t('common.close')}
             </button>
             <button className="btn primary" onClick={print}>
-              {t('centers.print')}
+              <Icon name="printer" />{t('centers.print')}
             </button>
           </>
         }
@@ -356,7 +357,7 @@ function CenterSheet({ center, onClose }) {
             </dl>
           </div>
           {!sessions ? (
-            <div className="muted">{t('common.loading')}</div>
+            <Spinner />
           ) : (
             <table className="table sheet-table">
               <tbody>
@@ -438,20 +439,20 @@ function Schedule({ centers, rounds, assignments, reload }) {
         </div>
         <div className="row gap wrap no-print">
           <button className="btn" onClick={exportCsv} disabled={!shown.length}>
-            {t('centers.export')}
+            <Icon name="download" />{t('centers.export')}
           </button>
           <button className="btn" onClick={() => window.print()}>
-            {t('centers.print')}
+            <Icon name="printer" />{t('centers.print')}
           </button>
           {admin && centers.length > 0 && (
             <button className="btn primary" onClick={() => setEditing({})}>
-              {t('centers.assign')}
+              <Icon name="plus" />{t('centers.assign')}
             </button>
           )}
         </div>
       </div>
       {centers.length === 0 ? (
-        <Empty icon="⌂">{t('centers.none')}</Empty>
+        <Empty icon="centers">{t('centers.none')}</Empty>
       ) : (
         <div className="table-wrap">
           <table className="table schedule">
@@ -551,11 +552,11 @@ function CentersTable({ reload }) {
         </label>
         {admin && (
           <button className="btn primary" onClick={() => setEditing(null)}>
-            {t('centers.add')}
+            <Icon name="plus" />{t('centers.add')}
           </button>
         )}
       </div>
-      {list && list.length === 0 && <Empty icon="⌂">{t('centers.none')}</Empty>}
+      {list && list.length === 0 && <Empty icon="centers">{t('centers.none')}</Empty>}
       {list && list.length > 0 && (
         <div className="table-wrap">
           <table className="table">
@@ -647,7 +648,7 @@ function AvailabilityEditor({ value, onChange, centers, disabled }) {
                     <input type="time" step="900" disabled={disabled} value={s.end} onChange={(e) => setSlots(slots.map((x, j) => (j === s.i ? { ...x, end: e.target.value } : x)))} />
                     {!disabled && (
                       <button type="button" className="icon-btn sm" aria-label={t('mine.removeSlot')} onClick={() => setSlots(slots.filter((_, j) => j !== s.i))}>
-                        ✕
+                        <Icon name="close" size={14} />
                       </button>
                     )}
                   </div>
@@ -655,7 +656,7 @@ function AvailabilityEditor({ value, onChange, centers, disabled }) {
               </div>
               {!disabled && (
                 <button type="button" className="btn sm" onClick={() => setSlots([...slots, { day: d, start: '10:00', end: '14:00' }])}>
-                  {t('mine.addSlot')}
+                  <Icon name="plus" />{t('mine.addSlot')}
                 </button>
               )}
             </div>
@@ -823,11 +824,11 @@ function Availability({ centers, rounds, reloadRounds }) {
           ))}
         </div>
         <button className="btn primary" onClick={() => setCreating(true)}>
-          {t('avail.newRound')}
+          <Icon name="plus" />{t('avail.newRound')}
         </button>
       </div>
 
-      {rounds.length === 0 && <Empty icon="🗓">{t('avail.noRounds')}</Empty>}
+      {rounds.length === 0 && <Empty icon="calendar">{t('avail.noRounds')}</Empty>}
 
       {detail && (
         <section className="panel">
@@ -843,7 +844,7 @@ function Availability({ centers, rounds, reloadRounds }) {
             <div className="row gap wrap">
               {detail.status === 'open' && missing > 0 && (
                 <button className="btn" onClick={remind}>
-                  🔔 {t('avail.remind', { n: missing })}
+                  <Icon name="bell" /> {t('avail.remind', { n: missing })}
                 </button>
               )}
               <button className="btn" onClick={() => setStatus(detail.status === 'open' ? 'closed' : 'open')}>
@@ -992,7 +993,7 @@ function Mine({ centers, rounds, assignments, reloadRounds }) {
           )}
         </div>
         {!current ? (
-          <Empty icon="🗓">{t('mine.noRound')}</Empty>
+          <Empty icon="calendar">{t('mine.noRound')}</Empty>
         ) : (
           <>
             {closed ? <div className="alert info sm">{t('mine.closed')}</div> : <p className="muted">{t('mine.explain')}</p>}
@@ -1012,7 +1013,7 @@ function Mine({ centers, rounds, assignments, reloadRounds }) {
       <section className="panel">
         <h2>{t('mine.sessions')}</h2>
         {mine.length === 0 ? (
-          <Empty icon="⌂">{t('mine.noSessions')}</Empty>
+          <Empty icon="centers">{t('mine.noSessions')}</Empty>
         ) : (
           <div className="table-wrap flat">
             <table className="table">
@@ -1100,7 +1101,7 @@ export default function Centers() {
         </div>
       </div>
       {!loaded ? (
-        <div className="muted">{t('common.loading')}</div>
+        <Spinner />
       ) : tab === 'mine' ? (
         <Mine centers={centers} rounds={rounds} assignments={assignments} reloadRounds={loadRounds} />
       ) : tab === 'schedule' ? (

@@ -16,11 +16,17 @@ import Users from './pages/Users.jsx';
 import Settings from './pages/Settings.jsx';
 import Calls from './pages/Calls.jsx';
 import Centers from './pages/Centers.jsx';
+import { Spinner } from './components/ui.jsx';
 
 function Routed() {
   const { user, booting, meta, bootError } = useApp();
   const location = useLocation();
-  if (booting) return <div className="boot">…</div>;
+  if (booting)
+    return (
+      <div className="boot">
+        <Spinner />
+      </div>
+    );
   if (bootError || !meta) return <ServerUnreachable />;
   // Reset links work whether or not someone is signed in on this device.
   if (location.pathname === '/reset') return <ResetPassword />;

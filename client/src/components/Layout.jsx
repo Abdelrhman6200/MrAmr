@@ -5,17 +5,57 @@ import { useApp } from '../context.jsx';
 import { Avatar, timeAgo, useTaskDialog } from './ui.jsx';
 import TaskDetail from './TaskDetail.jsx';
 import TaskForm from './TaskForm.jsx';
+import Icon from './Icon.jsx';
 
 const NAV = [
-  { to: '/', key: 'nav.dashboard', icon: '◧', end: true },
-  { to: '/tasks', key: 'nav.tasks', icon: '☑' },
-  { to: '/projects', key: 'nav.projects', icon: '▤' },
-  { to: '/calendar', key: 'nav.calendar', icon: '▦' },
-  { to: '/centers', key: 'nav.centers', icon: '⌂' },
-  { to: '/calls', key: 'nav.calls', icon: '☎', calls: true },
-  { to: '/team', key: 'nav.team', icon: '☷' },
-  { to: '/reports', key: 'nav.reports', icon: '▥' },
+  { to: '/', key: 'nav.dashboard', icon: 'dashboard', end: true },
+  { to: '/tasks', key: 'nav.tasks', icon: 'tasks' },
+  { to: '/projects', key: 'nav.projects', icon: 'projects' },
+  { to: '/calendar', key: 'nav.calendar', icon: 'calendar' },
+  { to: '/centers', key: 'nav.centers', icon: 'centers' },
+  { to: '/calls', key: 'nav.calls', icon: 'calls', calls: true },
+  { to: '/team', key: 'nav.team', icon: 'team' },
+  { to: '/reports', key: 'nav.reports', icon: 'reports' },
 ];
+
+export function Logo({ size = 28 }) {
+  return (
+    <span className="logo" style={{ width: size, height: size }}>
+      <Icon name="check" size={size * 0.6} strokeWidth={3} />
+    </span>
+  );
+}
+
+// Searches tasks from anywhere; "/" focuses it.
+function GlobalSearch() {
+  const { t } = useApp();
+  const navigate = useNavigate();
+  const ref = useRef(null);
+  const [q, setQ] = useState('');
+  useEffect(() => {
+    const onKey = (e) => {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+      if (e.key === '/' && !typing) {
+        e.preventDefault();
+        ref.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const submit = (e) => {
+    e.preventDefault();
+    navigate(`/tasks?q=${encodeURIComponent(q.trim())}`);
+    ref.current?.blur();
+  };
+  return (
+    <form className="global-search" onSubmit={submit} role="search">
+      <Icon name="search" size={16} />
+      <input ref={ref} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('nav.search')} aria-label={t('nav.search')} />
+      <kbd>/</kbd>
+    </form>
+  );
+}
 
 export function LanguageSwitch({ className = '' }) {
   const { lang, setLang, t } = useApp();
@@ -66,7 +106,8 @@ function Notifications() {
   return (
     <div className="notif" ref={ref}>
       <button className="icon-btn bell" onClick={() => setOpen((o) => !o)} aria-label={t('notif.title')}>
-        🔔{data.unread > 0 && <span className="badge">{data.unread > 9 ? '9+' : data.unread}</span>}
+        <Icon name="bell" size={19} />
+        {data.unread > 0 && <span className="badge">{data.unread > 9 ? '9+' : data.unread}</span>}
       </button>
       {open && (
         <div className="notif-panel">
@@ -78,7 +119,12 @@ function Notifications() {
               </button>
             )}
           </div>
-          {data.items.length === 0 && <div className="muted pad">{t('notif.empty')}</div>}
+          {data.items.length === 0 && (
+            <div className="notif-empty">
+              <Icon name="inbox" size={28} />
+              <span>{t('notif.empty')}</span>
+            </div>
+          )}
           {data.items.map((n) => (
             <button key={n.id} className={`notif-item ${n.read ? '' : 'unread'}`} onClick={() => click(n)}>
               <span>{text(n)}</span>
@@ -102,35 +148,39 @@ export default function Layout({ children }) {
     <div className={`shell ${menu ? 'menu-open' : ''}`}>
       <aside className="sidebar">
         <div className="brand">
-          <span className="logo">✓</span> TaskFlow
+          <Logo /> TaskFlow
         </div>
-        <button className="btn primary block" onClick={() => create()}>
+        <button className="btn primary block new-task" onClick={() => create()}>
+          <Icon name="plus" />
           {t('nav.newTask')}
         </button>
         <nav>
           {NAV.filter((n) => !n.calls || canUseCalls).map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className="nav-link">
-              <span className="nav-icon">{n.icon}</span>
+              <Icon name={n.icon} />
               {t(n.key)}
             </NavLink>
           ))}
           {isUserAdmin && (
-            <NavLink to="/users" className="nav-link">
-              <span className="nav-icon">⚙</span>
-              {t('nav.users')}
-            </NavLink>
+            <>
+              <div className="nav-section">{t('nav.admin')}</div>
+              <NavLink to="/users" className="nav-link">
+                <Icon name="users" />
+                {t('nav.users')}
+              </NavLink>
+            </>
           )}
         </nav>
         <div className="sidebar-foot">
           <NavLink to="/settings" className="me">
             <Avatar name={user.name} color={user.avatar_color} size={32} />
-            <div>
+            <div className="grow">
               <div className="me-name">{user.name}</div>
               <div className="me-role">{user.title || roleLabel(user.role)}</div>
             </div>
           </NavLink>
-          <button className="link" onClick={logout}>
-            {t('nav.signOut')}
+          <button className="icon-btn sign-out" onClick={logout} title={t('nav.signOut')} aria-label={t('nav.signOut')}>
+            <Icon name="logout" className="flip" />
           </button>
         </div>
       </aside>
@@ -138,8 +188,9 @@ export default function Layout({ children }) {
       <div className="main">
         <header className="topbar">
           <button className="icon-btn hamburger" onClick={() => setMenu(true)} aria-label={t('nav.menu')}>
-            ☰
+            <Icon name="menu" size={20} />
           </button>
+          <GlobalSearch />
           <div className="grow" />
           <LanguageSwitch />
           <Notifications />
@@ -148,7 +199,12 @@ export default function Layout({ children }) {
       </div>
       {current === 'new' && <TaskForm />}
       {current && current !== 'new' && <TaskDetail id={Number(current)} />}
-      {toast && <div className={`toast ${toast.kind}`}>{toast.message}</div>}
+      {toast && (
+        <div className={`toast ${toast.kind}`} role="status">
+          <Icon name={toast.kind === 'error' ? 'alert' : 'check'} size={16} />
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { todayISO, useTaskDialog } from '../components/ui.jsx';
+import Icon from '../components/Icon.jsx';
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 // The week starts on Saturday, matching the centers schedule.
@@ -51,7 +52,7 @@ export default function CalendarPage() {
           </select>
           <div className="seg">
             <button onClick={() => shift(-1)} aria-label={t('cal.prev')}>
-              <span className="flip">‹</span>
+              <Icon name="back" className="flip" />
             </button>
             <button
               onClick={() => {
@@ -62,7 +63,7 @@ export default function CalendarPage() {
               {t('cal.today')}
             </button>
             <button onClick={() => shift(1)} aria-label={t('cal.next')}>
-              <span className="flip">›</span>
+              <Icon name="next" className="flip" />
             </button>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { API_BASE } from '../api.js';
 import { useApp } from '../context.jsx';
-import { LanguageSwitch } from '../components/Layout.jsx';
+import AuthShell from '../components/AuthShell.jsx';
 
 // Shown when the web app can't reach its API — usually a deployment setting.
 export default function ServerUnreachable() {
@@ -9,14 +9,8 @@ export default function ServerUnreachable() {
   const setup = bootError?.code === 'server_misconfigured';
   const address = sameSite ? `${window.location.origin}${API_BASE}` : API_BASE;
   return (
-    <div className="login">
+    <AuthShell>
       <div className="login-card">
-        <div className="row between wrap gap">
-          <div className="brand big">
-            <span className="logo">✓</span> TaskFlow
-          </div>
-          <LanguageSwitch />
-        </div>
         <h2 style={{ margin: 0 }}>{t(setup ? 'offline.setupTitle' : 'offline.title')}</h2>
         <p className="muted">{t(setup ? 'offline.setupBody' : 'offline.body')}</p>
         {setup && bootError.reason && (
@@ -37,6 +31,6 @@ export default function ServerUnreachable() {
           {t('offline.retry')}
         </button>
       </div>
-    </div>
+    </AuthShell>
   );
 }

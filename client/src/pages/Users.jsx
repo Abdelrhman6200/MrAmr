@@ -5,6 +5,7 @@ import { useApp } from '../context.jsx';
 import { Avatar, DeptTag, Modal, UserSelect } from '../components/ui.jsx';
 import { DICTS } from '../i18n.js';
 import { download, readSpreadsheet, toCsv } from '../sheet.js';
+import Icon from '../components/Icon.jsx';
 
 const COLUMN_GUESSES = {
   name: [/^name$/i, /full.?name/i, /الاسم/, /اسم/, /name/i],
@@ -130,7 +131,7 @@ function ImportModal({ people, onClose, onDone }) {
           <>
             {generated.length > 0 && (
               <button className="btn" onClick={downloadCreds}>
-                {t('import.downloadCreds')}
+                <Icon name="download" />{t('import.downloadCreds')}
               </button>
             )}
             <button className="btn primary" onClick={onClose}>
@@ -297,7 +298,7 @@ function ResetLink({ user }) {
       {error && <div className="alert error">{error}</div>}
       {!link ? (
         <button type="button" className="btn" onClick={create}>
-          🔑 {t('users.resetLink')}
+          <Icon name="key" /> {t('users.resetLink')}
         </button>
       ) : (
         <>
@@ -448,18 +449,19 @@ export default function Users() {
                 .catch((e) => notify(e.message, 'error'))
             }
           >
-            {t('users.backup')}
+            <Icon name="download" />{t('users.backup')}
           </button>
           {me.role === 'ceo' && (
             <button className={sample ? 'btn danger' : 'btn'} disabled={sampleBusy} onClick={toggleSample}>
+              {!sample && <Icon name="sparkles" />}
               {sampleBusy ? '…' : t(sample ? 'sample.remove' : 'sample.load')}
             </button>
           )}
           <button className="btn" onClick={() => setImporting(true)}>
-            {t('users.import')}
+            <Icon name="upload" />{t('users.import')}
           </button>
           <button className="btn primary" onClick={() => setEditing(null)}>
-            {t('users.add')}
+            <Icon name="plus" />{t('users.add')}
           </button>
         </div>
       </div>
