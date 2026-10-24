@@ -134,6 +134,7 @@ export function AppProvider({ children }) {
       statusLabel: (k) => label('status', k, find(meta?.statuses, k)),
       priorityLabel: (k) => label('priority', k, find(meta?.priorities, k)),
       typeLabel: (k) => label('type', k, find(meta?.taskTypes, k)),
+      trackLabel: (k) => label('track', k, find(meta?.tracks, k)),
       projectStatusLabel: (k) => label('pstatus', k, find(meta?.projectStatuses, k)),
       callStatusLabel: (k) => label('callStatus', k, find(meta?.callStatuses, k)),
       canUseCalls: user ? user.role === 'ceo' || meta?.roles[user.role]?.department === 'customer_service' : false,

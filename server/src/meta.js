@@ -4,6 +4,7 @@ export const DEPARTMENTS = {
   executive: { label: 'Executive', color: '#334155' },
   operations: { label: 'Operations', color: '#0ea5e9' },
   content: { label: 'Content', color: '#8b5cf6' },
+  academic: { label: 'Academic Material', color: '#6366f1' },
   marketing: { label: 'Marketing', color: '#f97316' },
   systems_ops: { label: 'Systems Operations', color: '#14b8a6' },
   customer_service: { label: 'Customer Service', color: '#ec4899' },
@@ -17,6 +18,8 @@ export const ROLES = {
   ops_manager: { label: 'Operations Manager', department: 'operations', level: 'manager' },
   head_of_content: { label: 'Head of Content', department: 'content', level: 'manager' },
   instructor: { label: 'Instructor', department: 'content', level: 'member' },
+  academic_head: { label: 'Head of Academic Material', department: 'academic', level: 'manager' },
+  assistant: { label: 'Teaching Assistant', department: 'academic', level: 'member' },
   marketing_manager: { label: 'Marketing Manager', department: 'marketing', level: 'manager' },
   marketing_member: { label: 'Marketing Team Member', department: 'marketing', level: 'member' },
   sysops_manager: { label: 'Systems Operations Lead', department: 'systems_ops', level: 'manager' },
@@ -61,7 +64,33 @@ export const TASK_TYPES = [
   { key: 'bug', label: 'Platform Bug' },
   { key: 'feature', label: 'Feature Request' },
   { key: 'operations', label: 'Operations' },
+  // Academic Material: the assistants' work, at the centers and on the platform.
+  { key: 'hw_grading', label: 'Homework grading at a center', group: 'academic' },
+  { key: 'exam_proctoring', label: 'Exam proctoring', group: 'academic' },
+  { key: 'exam_grading', label: 'Exam grading at a center', group: 'academic' },
+  { key: 'center_questions', label: 'Student questions at a center', group: 'academic' },
+  { key: 'exam_papers', label: 'Writing exam papers', group: 'academic' },
+  { key: 'exam_answers', label: 'Exam answers', group: 'academic' },
+  { key: 'model_answer_review', label: 'Model answer review', group: 'academic' },
+  { key: 'hw_model_answer', label: 'Homework model answer', group: 'academic' },
+  { key: 'answer_key_review', label: 'Answer key review', group: 'academic' },
+  { key: 'platform_questions', label: 'Student questions on the platform', group: 'academic' },
+  { key: 'essay_grading', label: 'Essay grading on the platform', group: 'academic' },
+  { key: 'weekly_duties', label: 'Weekly duties', group: 'academic' },
 ];
+
+// Which curriculum a task is for (optional).
+export const TRACKS = [
+  { key: 'general', label: 'General Secondary' },
+  { key: 'azhar', label: 'Azhar' },
+  { key: 'baccalaureate', label: 'Baccalaureate' },
+];
+
+// Duties created every week (from Saturday) for everyone in these roles, as one
+// task with a checklist, reviewed by their manager. Items are i18n keys.
+export const WEEKLY_DUTIES = {
+  assistant: ['weekly.book1', 'weekly.book2', 'weekly.book3', 'weekly.teacherBook', 'weekly.exam', 'weekly.attend'],
+};
 
 export const PROJECT_STATUSES = [
   { key: 'planning', label: 'Planning' },

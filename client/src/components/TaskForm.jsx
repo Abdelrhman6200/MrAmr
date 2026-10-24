@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
-import { Modal, UserSelect, useTaskDialog } from './ui.jsx';
+import { Modal, TrackOptions, TypeOptions, UserSelect, useTaskDialog } from './ui.jsx';
 
 export default function TaskForm() {
-  const { meta, user, refresh, notify, users, t, typeLabel, priorityLabel, statusLabel } = useApp();
+  const { meta, user, refresh, notify, users, t, priorityLabel, statusLabel } = useApp();
   const { params, close, open } = useTaskDialog();
   const [projects, setProjects] = useState([]);
   const [assignable, setAssignable] = useState([]);
@@ -22,6 +22,7 @@ export default function TaskForm() {
     due_date: params.get('new_due_date') || '',
     estimate_hours: '',
     tags: '',
+    track: '',
     checklist: '',
   }));
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v?.target ? v.target.value : v }));
@@ -95,11 +96,13 @@ export default function TaskForm() {
           <label>
             {t('form.type')}
             <select value={form.type} onChange={set('type')}>
-              {meta.taskTypes.map((x) => (
-                <option key={x.key} value={x.key}>
-                  {typeLabel(x.key)}
-                </option>
-              ))}
+              <TypeOptions />
+            </select>
+          </label>
+          <label>
+            {t('form.track')}
+            <select value={form.track} onChange={set('track')}>
+              <TrackOptions none={t('form.noTrack')} />
             </select>
           </label>
           <label>

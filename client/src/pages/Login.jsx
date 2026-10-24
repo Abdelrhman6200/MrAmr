@@ -8,6 +8,8 @@ const DEMO = [
   ['ops_manager', 'ops@taskflow.local'],
   ['head_of_content', 'content.head@taskflow.local'],
   ['instructor', 'instructor1@taskflow.local'],
+  ['academic_head', 'academic.head@taskflow.local'],
+  ['assistant', 'assistant1@taskflow.local'],
   ['marketing_manager', 'marketing@taskflow.local'],
   ['sysops_manager', 'sysops@taskflow.local'],
   ['content_quality', 'quality@taskflow.local'],

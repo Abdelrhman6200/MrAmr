@@ -1,9 +1,10 @@
 // Demo organisation. Run `npm run seed` to wipe the database and reload it.
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
-import { hashPassword } from './auth.js';
+import { hashPassword, verifyPassword } from './auth.js';
 import { bump, databaseUrl, openDb, readCounter } from './db.js';
 import { localDate, nowUtc, utcAgo, DAY } from './time.js';
+import { weekStart } from './weekly.js';
 
 export const DEMO_PASSWORD = 'password123';
 
@@ -49,6 +50,101 @@ const ID_TABLES = [
   'center_assignments',
 ];
 
+// Rows are collected first and written in a few bulk statements by flush():
+// a hosted database may be far away, and hundreds of one-row inserts would take
+// longer than a serverless request may run. Ids are reserved up front, so later
+// rows can refer to earlier ones before anything is written. Every row is listed
+// in sample_rows.
+async function bulkWriter(tx) {
+  const reserved = {};
+  for (const r of await tx.all(
+    `SELECT t.tbl, nextval(pg_get_serial_sequence(t.tbl, 'id'))::int AS id
+     FROM unnest(?::text[]) AS t(tbl), generate_series(1, 120)`,
+    [ID_TABLES],
+  )) {
+    (reserved[r.tbl] ??= []).push(r.id);
+  }
+  const pending = new Map(); // statement -> list of parameter lists, in first-use order
+  const created = [];
+  const prepare = (sql) => ({
+    run: async (...params) => {
+      const table = /^\s*INSERT INTO (\w+)/i.exec(sql)[1];
+      let id = null;
+      if (ID_TABLES.includes(table)) {
+        id = reserved[table].shift();
+        if (id == null) throw new Error(`Seed reserved too few ids for ${table}`);
+        params = [id, ...params];
+        created.push([table, id]);
+      }
+      if (!pending.has(sql)) pending.set(sql, { table, rows: [] });
+      pending.get(sql).rows.push(params);
+      return { lastInsertRowid: id };
+    },
+  });
+  const flush = async () => {
+    for (const [sql, { table, rows }] of pending) {
+      const at = sql.search(/\bVALUES\b/i);
+      let head = sql.slice(0, at);
+      let tuple = sql.slice(at + 6).trim();
+      const close = tuple.indexOf(')') + 1;
+      const rest = tuple.slice(close);
+      tuple = tuple.slice(0, close);
+      if (ID_TABLES.includes(table)) {
+        head = head.replace('(', '(id, ');
+        tuple = tuple.replace('(', '(?, ');
+      }
+      await tx.run(`${head} VALUES ${rows.map(() => tuple).join(', ')}${rest}`, rows.flat());
+    }
+    await tx.run('INSERT INTO sample_rows (tbl, row_id) SELECT * FROM unnest(?::text[], ?::int[])', [
+      created.map((c) => c[0]),
+      created.map((c) => c[1]),
+    ]);
+  };
+  return { prepare, flush };
+}
+
+// Writers for sample projects and tasks; `ids` maps sample keys to user ids.
+function sampleHelpers(prepare, ids) {
+  const insProject = prepare('INSERT INTO projects (name, description, department, owner_id, status, start_date, due_date, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+  const insMember = prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING');
+  const project = async (name, desc, dept, owner, members, color, due, status = 'active') => {
+    const id = (await insProject.run(name, desc, dept, ids[owner], status, day(-20), day(due), color)).lastInsertRowid;
+    for (const m of [owner, ...members]) await insMember.run(id, ids[m]);
+    return id;
+  };
+  const insTask = prepare(
+    `INSERT INTO tasks (project_id, title, description, type, status, priority, assignee_id, reporter_id, reviewer_id, due_date, estimate_hours, tags, track, weekly_key, completed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const insCheck = prepare('INSERT INTO checklist_items (task_id, text, done, position) VALUES (?, ?, ?, ?)');
+  const insComment = prepare('INSERT INTO comments (task_id, user_id, body) VALUES (?, ?, ?)');
+  const insActivity = prepare('INSERT INTO activity (task_id, project_id, user_id, action, detail) VALUES (?, ?, ?, ?, ?)');
+  const task = async (p, title, type, status, priority, assignee, reporter, due, opts = {}) => {
+    const { lastInsertRowid: id } = await insTask.run(
+      p,
+      title,
+      opts.desc || '',
+      type,
+      status,
+      priority,
+      assignee ? ids[assignee] : null,
+      ids[reporter],
+      opts.reviewer ? ids[opts.reviewer] : null,
+      due == null ? null : day(due),
+      opts.est ?? null,
+      opts.tags || '',
+      opts.track || '',
+      opts.week ?? null,
+      status === 'done' ? daysAgoUtc(opts.doneAgo ?? 2) : null,
+    );
+    await insActivity.run(id, p, ids[reporter], 'created', title);
+    for (const [i, [text, done]] of (opts.checklist || []).entries()) await insCheck.run(id, text, done ? 1 : 0, i);
+    for (const [who, body] of opts.comments || []) await insComment.run(id, ids[who], body);
+    return id;
+  };
+  return { project, task };
+}
+
 // Loads the demo organisation. Every row it creates is listed in sample_rows so
 // removeSampleData() can take it out again.
 //
@@ -57,54 +153,7 @@ const ID_TABLES = [
 // knows, so a live site doesn't gain accounts with a published password.
 export async function seed(db, { ceo = null } = {}) {
   await db.tx(async (tx) => {
-    // Rows are collected first and written in a few bulk statements at the end:
-    // a hosted database may be far away, and hundreds of one-row inserts would take
-    // longer than a serverless request may run. Ids are reserved up front, so later
-    // rows can refer to earlier ones before anything is written.
-    const reserved = {};
-    for (const r of await tx.all(
-      `SELECT t.tbl, nextval(pg_get_serial_sequence(t.tbl, 'id'))::int AS id
-       FROM unnest(?::text[]) AS t(tbl), generate_series(1, 120)`,
-      [ID_TABLES],
-    )) {
-      (reserved[r.tbl] ??= []).push(r.id);
-    }
-    const pending = new Map(); // statement -> list of parameter lists, in first-use order
-    const created = [];
-    const prepare = (sql) => ({
-      run: async (...params) => {
-        const table = /^\s*INSERT INTO (\w+)/i.exec(sql)[1];
-        let id = null;
-        if (ID_TABLES.includes(table)) {
-          id = reserved[table].shift();
-          if (id == null) throw new Error(`Seed reserved too few ids for ${table}`);
-          params = [id, ...params];
-          created.push([table, id]);
-        }
-        if (!pending.has(sql)) pending.set(sql, { table, rows: [] });
-        pending.get(sql).rows.push(params);
-        return { lastInsertRowid: id };
-      },
-    });
-    const flush = async () => {
-      for (const [sql, { table, rows }] of pending) {
-        const at = sql.search(/\bVALUES\b/i);
-        let head = sql.slice(0, at);
-        let tuple = sql.slice(at + 6).trim();
-        const close = tuple.indexOf(')') + 1;
-        const rest = tuple.slice(close);
-        tuple = tuple.slice(0, close);
-        if (ID_TABLES.includes(table)) {
-          head = head.replace('(', '(id, ');
-          tuple = tuple.replace('(', '(?, ');
-        }
-        await tx.run(`${head} VALUES ${rows.map(() => tuple).join(', ')}${rest}`, rows.flat());
-      }
-      await tx.run('INSERT INTO sample_rows (tbl, row_id) SELECT * FROM unnest(?::text[], ?::int[])', [
-        created.map((c) => c[0]),
-        created.map((c) => c[1]),
-      ]);
-    };
+    const { prepare, flush } = await bulkWriter(tx);
     const hash = hashPassword(ceo ? crypto.randomBytes(24).toString('base64url') : DEMO_PASSWORD);
     const ids = {};
     if (ceo) ids.ceo = ceo.id;
@@ -114,13 +163,7 @@ export async function seed(db, { ceo = null } = {}) {
       ids[key] = (await insUser.run(name, email, hash, role, null, mgr ? ids[mgr] : null, color)).lastInsertRowid;
     }
 
-    const insProject = prepare('INSERT INTO projects (name, description, department, owner_id, status, start_date, due_date, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-    const insMember = prepare('INSERT INTO project_members (project_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING');
-    const project = async (name, desc, dept, owner, members, color, due, status = 'active') => {
-      const id = (await insProject.run(name, desc, dept, ids[owner], status, day(-20), day(due), color)).lastInsertRowid;
-      for (const m of [owner, ...members]) await insMember.run(id, ids[m]);
-      return id;
-    };
+    const { project, task } = sampleHelpers(prepare, ids);
 
     const physics = await project('Physics 101 — Term 1 Course', 'Record, edit and QA all Term 1 physics lessons before launch.', 'content', 'hoc', ['ins1', 'ins2', 'ins3', 'cq'], '#8b5cf6', 25);
     const campaign = await project('Back-to-School Campaign', 'Multi-channel enrollment campaign for the new term.', 'marketing', 'mkt', ['mkt1', 'mkt2', 'ins1'], '#f97316', 14);
@@ -128,34 +171,6 @@ export async function seed(db, { ceo = null } = {}) {
     const support = await project('Support Backlog Cleanup', 'Clear the backlog of open student tickets and update the FAQ.', 'customer_service', 'cs', ['cs1', 'cs2'], '#ec4899', 10);
     const audit = await project('Q4 Content Quality Audit', 'Audit published lessons against the quality checklist.', 'systems_ops', 'sys', ['cq', 'qc', 'hoc'], '#14b8a6', 40, 'planning');
 
-    const insTask = prepare(
-      `INSERT INTO tasks (project_id, title, description, type, status, priority, assignee_id, reporter_id, reviewer_id, due_date, estimate_hours, tags, completed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    );
-    const insCheck = prepare('INSERT INTO checklist_items (task_id, text, done, position) VALUES (?, ?, ?, ?)');
-    const insComment = prepare('INSERT INTO comments (task_id, user_id, body) VALUES (?, ?, ?)');
-    const insActivity = prepare('INSERT INTO activity (task_id, project_id, user_id, action, detail) VALUES (?, ?, ?, ?, ?)');
-    const task = async (p, title, type, status, priority, assignee, reporter, due, opts = {}) => {
-      const { lastInsertRowid: id } = await insTask.run(
-          p,
-          title,
-          opts.desc || '',
-          type,
-          status,
-          priority,
-          assignee ? ids[assignee] : null,
-          ids[reporter],
-          opts.reviewer ? ids[opts.reviewer] : null,
-          due == null ? null : day(due),
-          opts.est ?? null,
-          opts.tags || '',
-          status === 'done' ? daysAgoUtc(opts.doneAgo ?? 2) : null,
-      );
-      await insActivity.run(id, p, ids[reporter], 'created', title);
-      for (const [i, [text, done]] of (opts.checklist || []).entries()) await insCheck.run(id, text, done ? 1 : 0, i);
-      for (const [who, body] of opts.comments || []) await insComment.run(id, ids[who], body);
-      return id;
-    };
 
     // Content
     await task(physics, 'Record Lesson 1: Motion & Velocity', 'content', 'done', 'high', 'ins1', 'hoc', -6, { reviewer: 'cq', est: 6, tags: 'video,lesson', doneAgo: 5 });
@@ -232,6 +247,8 @@ export async function seed(db, { ceo = null } = {}) {
       comments: [['ops', 'Ready for your sign-off. The main risk is the Safari video bug.']],
     });
 
+    await academicSample(prepare, ids, hash);
+
     // Customer Service call list
     const callList = (
       await prepare('INSERT INTO call_lists (name, description, source_filename, columns, created_by) VALUES (?, ?, ?, ?, ?)')
@@ -305,7 +322,99 @@ export async function seed(db, { ceo = null } = {}) {
     await flush();
     // Sample notifications are history, not news: never email them.
     await tx.run('UPDATE notifications SET emailed = 1');
+    await bump(tx, 'sample_academic'); // included, so upgradeSample() has nothing to add
     await bump(tx, 'org');
+  });
+}
+
+// The Academic Material team: a head and three assistants, their center and
+// platform work for the general, Azhar and Baccalaureate tracks, and last week's
+// duties (this week's are created by weekly.js like for any assistant).
+const ACADEMIC_PEOPLE = [
+  ['acad', 'Sherif Abdallah', 'academic.head@taskflow.local', 'academic_head', 'ceo', '#6366f1'],
+  ['asst1', 'Aya Mahmoud', 'assistant1@taskflow.local', 'assistant', 'acad', '#818cf8'],
+  ['asst2', 'Mostafa Hany', 'assistant2@taskflow.local', 'assistant', 'acad', '#4f46e5'],
+  ['asst3', 'Nada Wael', 'assistant3@taskflow.local', 'assistant', 'acad', '#a5b4fc'],
+];
+
+async function academicSample(prepare, ids, hash) {
+  const insUser = prepare('INSERT INTO users (name, email, password_hash, role, title, manager_id, avatar_color) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  for (const [key, name, email, role, mgr, color] of ACADEMIC_PEOPLE) {
+    ids[key] = (await insUser.run(name, email, hash, role, null, ids[mgr], color)).lastInsertRowid;
+  }
+  const { project, task } = sampleHelpers(prepare, ids);
+  const chem = await project('Chemistry — Term 1 Academic Material', 'Homework, exams and student questions for the chemistry course, at the centers and on the platform.', 'academic', 'acad', ['asst1', 'asst2', 'asst3'], '#6366f1', 60);
+  const bac = await project('Baccalaureate Chemistry', 'Exam models, answers and student questions for the Baccalaureate track.', 'academic', 'acad', ['asst2', 'asst3'], '#4338ca', 75);
+
+  // At the centers
+  await task(chem, 'Grade Lesson 4 homework — Nasr City Center', 'hw_grading', 'in_progress', 'high', 'asst1', 'acad', 0, {
+    track: 'general',
+    desc: '64 papers from the Saturday group. Record the marks in the sheet before Monday.',
+    checklist: [['Group A (32 papers)', true], ['Group B (32 papers)', false], ['Enter the marks', false]],
+  });
+  await task(chem, 'Proctor the monthly exam — Maadi Center', 'exam_proctoring', 'todo', 'high', 'asst2', 'acad', 2, { track: 'general', desc: 'Friday 10:00–12:00, hall 2. Be there 30 minutes early.' });
+  await task(chem, 'Grade the monthly exam papers — Maadi Center', 'exam_grading', 'todo', 'high', 'asst2', 'acad', 4, { track: 'general', reviewer: 'acad' });
+  await task(chem, 'Take student questions — Heliopolis Saturday class', 'center_questions', 'todo', 'medium', 'asst3', 'acad', 1, { track: 'azhar' });
+  await task(chem, 'Grade Lesson 3 homework — Azhar group', 'hw_grading', 'done', 'medium', 'asst3', 'acad', -3, { track: 'azhar', doneAgo: 3 });
+
+  // Exams and answers
+  await task(chem, 'Write the October exam — models A and B', 'exam_papers', 'in_progress', 'urgent', 'asst1', 'acad', 3, {
+    track: 'general',
+    reviewer: 'acad',
+    checklist: [['Model A', true], ['Model B', false], ['Mark scheme', false]],
+  });
+  await task(chem, 'Answers for the October exam', 'exam_answers', 'todo', 'high', 'asst3', 'acad', 5, { track: 'general', reviewer: 'acad' });
+  await task(chem, 'Review the model answer for exam 3', 'model_answer_review', 'in_review', 'high', 'asst2', 'acad', 1, {
+    track: 'general',
+    reviewer: 'acad',
+    comments: [['asst2', 'Checked every answer against the book. Question 7 had a wrong unit — fixed.']],
+  });
+  await task(chem, 'Homework 5 model answer (General)', 'hw_model_answer', 'done', 'medium', 'asst1', 'acad', -1, { track: 'general', reviewer: 'acad', doneAgo: 1 });
+  await task(chem, 'Homework 5 model answer (Azhar)', 'hw_model_answer', 'in_progress', 'medium', 'asst3', 'acad', 2, { track: 'azhar', reviewer: 'acad' });
+  await task(chem, 'Review the Homework 5 answer key', 'answer_key_review', 'todo', 'medium', 'asst2', 'acad', 3, { track: 'azhar' });
+
+  // On the platform
+  await task(chem, 'Answer student questions on the platform — Lesson 4', 'platform_questions', 'in_progress', 'high', 'asst3', 'acad', 0, { track: 'general', desc: '23 open questions. Reply within 24 hours.' });
+  await task(chem, 'Grade the essay questions on the platform — Quiz 6', 'essay_grading', 'todo', 'high', 'asst1', 'acad', 3, { track: 'general' });
+
+  // Baccalaureate
+  await task(bac, 'Baccalaureate: exam model for Unit 1', 'exam_papers', 'todo', 'high', 'asst2', 'acad', 6, { track: 'baccalaureate', reviewer: 'acad' });
+  await task(bac, 'Baccalaureate: answer student questions on the platform', 'platform_questions', 'in_progress', 'medium', 'asst3', 'acad', 1, { track: 'baccalaureate' });
+
+  // Last week's duties
+  const last = weekStart(localDate(-7));
+  const items = ['Solve external book 1', 'Solve external book 2', 'Solve external book 3', 'Solve the teacher’s book', 'Solve the exam', 'Attend the class'];
+  for (const [who, done, status] of [['asst1', 6, 'done'], ['asst2', 5, 'in_progress'], ['asst3', 6, 'done']]) {
+    await task(null, `Weekly duties — week of ${last}`, 'weekly_duties', status, 'high', who, 'acad', -2, {
+      reviewer: 'acad',
+      week: last,
+      doneAgo: 2,
+      desc: 'Every week: solve the three external books, the teacher’s book and the exam, and attend the class.',
+      checklist: items.map((text, i) => [text, i < done]),
+    });
+  }
+}
+
+// Sample parts added after a site first loaded the sample (so far, the Academic
+// Material team): added once, under the Head of Company the sample belongs to.
+export async function upgradeSample(db) {
+  if ((await readCounter(db, 'sample_academic')) || !(await hasSampleData(db))) return false;
+  return db.tx(async (tx) => {
+    await tx.run('SELECT pg_advisory_xact_lock(4245)');
+    if (await readCounter(tx, 'sample_academic')) return false;
+    await bump(tx, 'sample_academic');
+    if (await tx.get("SELECT 1 FROM users WHERE email = 'academic.head@taskflow.local'")) return false;
+    const ops = await tx.get(
+      "SELECT o.password_hash, c.id AS ceo_id FROM users o JOIN users c ON c.id = o.manager_id AND c.role = 'ceo' WHERE o.email = 'ops@taskflow.local'",
+    );
+    if (!ops) return false;
+    // The same kind of password as the rest of the sample people.
+    const demo = verifyPassword(DEMO_PASSWORD, ops.password_hash);
+    const { prepare, flush } = await bulkWriter(tx);
+    await academicSample(prepare, { ceo: ops.ceo_id }, hashPassword(demo ? DEMO_PASSWORD : crypto.randomBytes(24).toString('base64url')));
+    await flush();
+    await bump(tx, 'org');
+    return true;
   });
 }
 
@@ -340,6 +449,8 @@ export async function removeSampleData(db, keeper) {
     for (const table of SAMPLE_TABLES) {
       removed += (await tx.run(`DELETE FROM ${table} WHERE id = ANY(?::int[])`, [await ids(table)])).rowCount;
     }
+    // Weekly duties weekly.js created for sample people go with them.
+    removed += (await tx.run('DELETE FROM tasks WHERE weekly_key IS NOT NULL AND assignee_id = ANY(?::int[])', [people])).rowCount;
     // Anything real still pointing at a sample person.
     await tx.run('UPDATE projects SET owner_id = ? WHERE owner_id = ANY(?::int[])', [keeper.id, people]);
     await tx.run('UPDATE tasks SET reporter_id = ? WHERE reporter_id = ANY(?::int[])', [keeper.id, people]);
@@ -373,7 +484,10 @@ export async function removeSampleData(db, keeper) {
 // stopped part-way (serverless platforms do that), neither is saved and the next
 // attempt starts over. The outcome is kept for /api/health.
 export async function autoLoadSample(db, preferEmail = null) {
-  if (await finished(db)) return false;
+  if (await finished(db)) {
+    await upgradeSample(db);
+    return false;
+  }
   try {
     const loaded = await db.tx(async (tx) => {
       await tx.run('SELECT pg_advisory_xact_lock(4245)'); // one instance at a time

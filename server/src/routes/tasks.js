@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { badRequest, forbidden, idParam, notFound, oneOf, optionalDate, optionalId, requiredString } from '../http.js';
-import { PRIORITIES, ROLES, STATUSES, TASK_TYPES, keys } from '../meta.js';
+import { PRIORITIES, ROLES, STATUSES, TASK_TYPES, TRACKS, keys } from '../meta.js';
 import { localDate, nowUtc } from '../time.js';
 import { translate } from '../../../client/src/i18n.js';
 
@@ -27,6 +27,8 @@ function normaliseTags(tags) {
   const list = Array.isArray(tags) ? tags : String(tags || '').split(',');
   return [...new Set(list.map((t) => String(t).trim().toLowerCase()).filter(Boolean))].slice(0, 20).join(',');
 }
+
+const track = (value) => (value ? oneOf(value, keys(TRACKS), 'track') : '');
 
 function estimate(value) {
   if (value === '' || value === null) return null;
@@ -139,6 +141,7 @@ export default function taskRoutes({ db, access }) {
     if (q.open === '1') add("t.status != 'done'");
     if (q.priority) add('t.priority = ?', String(q.priority));
     if (q.type) add('t.type = ?', String(q.type));
+    if (q.track) add('t.track = ?', String(q.track));
     if (q.project_id === 'none') add('t.project_id IS NULL');
     else if (q.project_id) add('t.project_id = ?', idParam(q.project_id));
     if (q.assignee_id === 'none') add('t.assignee_id IS NULL');
@@ -200,13 +203,14 @@ export default function taskRoutes({ db, access }) {
       optionalDate(b.due_date, 'due_date') ?? null,
       b.estimate_hours === undefined ? null : estimate(b.estimate_hours),
       normaliseTags(b.tags) ?? '',
+      track(b.track),
       status === 'done' ? nowUtc() : null,
     ];
 
     const id = await db.tx(async (tx) => {
       const task = await tx.get(
-        `INSERT INTO tasks (project_id, title, description, type, status, priority, assignee_id, reporter_id, reviewer_id, start_date, due_date, estimate_hours, tags, completed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+        `INSERT INTO tasks (project_id, title, description, type, status, priority, assignee_id, reporter_id, reviewer_id, start_date, due_date, estimate_hours, tags, track, completed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
         values,
       );
       await log(tx, task, req.user.id, 'created', title);
@@ -238,6 +242,7 @@ export default function taskRoutes({ db, access }) {
     if (b.due_date !== undefined) f.due_date = optionalDate(b.due_date, 'due_date');
     if (b.estimate_hours !== undefined) f.estimate_hours = estimate(b.estimate_hours);
     if (b.tags !== undefined) f.tags = normaliseTags(b.tags);
+    if (b.track !== undefined) f.track = track(b.track);
     if (b.project_id !== undefined) {
       f.project_id = optionalId(b.project_id, 'project_id');
       await checkProject(req.user, f.project_id);

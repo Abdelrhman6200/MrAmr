@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
-import { Avatar, Modal, PriorityTag, StatusPill, TypeTag, UserSelect, isOverdue, timeAgo, useTaskDialog } from './ui.jsx';
+import { Avatar, Modal, PriorityTag, StatusPill, TrackOptions, TrackTag, TypeOptions, TypeTag, UserSelect, isOverdue, timeAgo, useTaskDialog } from './ui.jsx';
 import Icon from './Icon.jsx';
 
 function ReviewBox({ task, onDone }) {
@@ -39,7 +39,7 @@ function ReviewBox({ task, onDone }) {
 }
 
 export default function TaskDetail({ id }) {
-  const { meta, refresh, version, notify, users, user, t, statusLabel, priorityLabel, typeLabel } = useApp();
+  const { meta, refresh, version, notify, users, user, t, statusLabel, priorityLabel } = useApp();
   const { close } = useTaskDialog();
   const [task, setTask] = useState(null);
   const [error, setError] = useState('');
@@ -139,6 +139,7 @@ export default function TaskDetail({ id }) {
             <StatusPill status={task.status} />
             <PriorityTag priority={task.priority} />
             <TypeTag type={task.type} />
+            <TrackTag track={task.track} />
             {isOverdue(task) && <span className="pill overdue-pill">{t('task.overdue')}</span>}
             {task.tags &&
               task.tags.split(',').map((tag) => (
@@ -274,11 +275,12 @@ export default function TaskDetail({ id }) {
           </Field>
           <Field label={t('form.type')}>
             <select value={task.type} disabled={ro} onChange={(e) => update({ type: e.target.value })}>
-              {meta.taskTypes.map((x) => (
-                <option key={x.key} value={x.key}>
-                  {typeLabel(x.key)}
-                </option>
-              ))}
+              <TypeOptions />
+            </select>
+          </Field>
+          <Field label={t('form.track')}>
+            <select value={task.track || ''} disabled={ro} onChange={(e) => update({ track: e.target.value })}>
+              <TrackOptions none={t('form.noTrack')} />
             </select>
           </Field>
           <Field label={t('form.project')}>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
-import { Avatar, DueDate, Empty, PriorityTag, StatusPill, TypeTag, useTaskDialog } from './ui.jsx';
+import { Avatar, DueDate, Empty, PriorityTag, StatusPill, TrackOptions, TrackTag, TypeOptions, TypeTag, useTaskDialog } from './ui.jsx';
 import Icon from './Icon.jsx';
 
 export function TaskCard({ task, draggable, compact }) {
@@ -26,6 +26,7 @@ export function TaskCard({ task, draggable, compact }) {
       <div className="card-meta">
         <PriorityTag priority={task.priority} />
         <TypeTag type={task.type} />
+        <TrackTag track={task.track} />
       </div>
       <div className="card-foot">
         <DueDate task={task} />
@@ -132,6 +133,7 @@ export function TaskTable({ tasks, hideProject }) {
                 <div className="cell-title">{task.title}</div>
                 <div className="muted sm">
                   <TypeTag type={task.type} />
+                  <TrackTag track={task.track} />
                   {task.checklist_total > 0 && (
                     <span className="inline-meta">
                       <Icon name="checklist" size={13} /> {task.checklist_done}/{task.checklist_total}
@@ -179,7 +181,7 @@ export function TaskTable({ tasks, hideProject }) {
 }
 
 export function TaskFilters({ filters, setFilters, projects, people, showScope = true }) {
-  const { meta, t, statusLabel, priorityLabel, typeLabel } = useApp();
+  const { meta, t, statusLabel, priorityLabel } = useApp();
   const set = (k) => (e) => setFilters({ ...filters, [k]: e.target.value });
   return (
     <div className="filters">
@@ -211,11 +213,10 @@ export function TaskFilters({ filters, setFilters, projects, people, showScope =
       </select>
       <select value={filters.type || ''} onChange={set('type')}>
         <option value="">{t('filter.anyType')}</option>
-        {meta.taskTypes.map((x) => (
-          <option key={x.key} value={x.key}>
-            {typeLabel(x.key)}
-          </option>
-        ))}
+        <TypeOptions />
+      </select>
+      <select value={filters.track || ''} onChange={set('track')}>
+        <TrackOptions none={t('filter.anyTrack')} />
       </select>
       {projects && (
         <select value={filters.project_id || ''} onChange={set('project_id')}>

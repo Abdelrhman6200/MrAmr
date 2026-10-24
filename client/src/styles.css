@@ -519,6 +519,12 @@ kbd {
   color: var(--muted);
   white-space: nowrap;
 }
+.tag.track {
+  background: var(--info-soft);
+  border-color: transparent;
+  color: var(--info);
+  font-weight: 600;
+}
 .tag.subtle {
   background: none;
   border: 0;

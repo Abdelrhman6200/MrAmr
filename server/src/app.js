@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { requireAuth } from './auth.js';
 import { makeAccess } from './access.js';
 import { HttpError } from './http.js';
-import { DEPARTMENTS, ROLES, STATUSES, PRIORITIES, TASK_TYPES, PROJECT_STATUSES, USER_ADMIN_ROLES, CALL_STATUSES, CENTER_ADMIN_ROLES, WEEKDAYS } from './meta.js';
+import { DEPARTMENTS, ROLES, STATUSES, PRIORITIES, TASK_TYPES, TRACKS, PROJECT_STATUSES, USER_ADMIN_ROLES, CALL_STATUSES, CENTER_ADMIN_ROLES, WEEKDAYS } from './meta.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import projectRoutes from './routes/projects.js';
@@ -18,6 +18,7 @@ import { cors, securityHeaders } from './security.js';
 import { createMailer, emailDispatcher } from './mail.js';
 import { background } from './background.js';
 import { autoLoadSample, readStatus } from './seed.js';
+import { ensureWeeklyDuties, weekStart } from './weekly.js';
 
 export function createApp({ db, secret, staticDir, mailer = createMailer({}), appUrl = null, corsOrigins = [], cronSecret = null, autoSample = false }) {
   const app = express();
@@ -69,11 +70,12 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
   });
   api.get('/meta', async (_req, res) => {
     const state = await appState();
-    res.json({ departments: DEPARTMENTS, roles: ROLES, statuses: STATUSES, priorities: PRIORITIES, taskTypes: TASK_TYPES, projectStatuses: PROJECT_STATUSES, userAdminRoles: USER_ADMIN_ROLES, callStatuses: CALL_STATUSES, centerAdminRoles: CENTER_ADMIN_ROLES, weekdays: WEEKDAYS, emailEnabled: mailer.enabled, resetByEmail: mailer.enabled && !!ctx.appUrl, demo: state.demo, needsSetup: state.needs_setup, sampleData: state.sample_data });
+    res.json({ departments: DEPARTMENTS, roles: ROLES, statuses: STATUSES, priorities: PRIORITIES, taskTypes: TASK_TYPES, tracks: TRACKS, projectStatuses: PROJECT_STATUSES, userAdminRoles: USER_ADMIN_ROLES, callStatuses: CALL_STATUSES, centerAdminRoles: CENTER_ADMIN_ROLES, weekdays: WEEKDAYS, emailEnabled: mailer.enabled, resetByEmail: mailer.enabled && !!ctx.appUrl, demo: state.demo, needsSetup: state.needs_setup, sampleData: state.sample_data });
   });
   // Scheduled sweep (Vercel Cron) that retries any notification emails left behind.
   api.get('/cron/emails', async (req, res) => {
     if (!cronSecret || req.get('authorization') !== `Bearer ${cronSecret}`) throw new HttpError(401, 'Not authenticated');
+    await ensureWeeklyDuties(db);
     await dispatchEmails();
     res.json({ ok: true });
   });
@@ -87,6 +89,20 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
     } catch (err) {
       next(err);
     }
+  });
+  // This week's recurring duties, checked once per instance per week and whenever
+  // the people change (a new assistant gets theirs straight away).
+  let weeklyChecked = null;
+  api.use(async (req, _res, next) => {
+    const key = `${weekStart()}:${req.orgVersion}`;
+    if (key === weeklyChecked) return next();
+    try {
+      await ensureWeeklyDuties(db);
+      weeklyChecked = key;
+    } catch (err) {
+      console.error('Creating weekly duties failed:', err);
+    }
+    next();
   });
   api.use('/users', userRoutes(ctx));
   api.use('/projects', projectRoutes(ctx));

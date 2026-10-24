@@ -36,6 +36,45 @@ export function TypeTag({ type }) {
   return <span className="tag">{typeLabel(type)}</span>;
 }
 
+export function TrackTag({ track }) {
+  const { trackLabel } = useApp();
+  return track ? <span className="tag track">{trackLabel(track)}</span> : null;
+}
+
+// <option>s for a task type <select>, grouped by department.
+export function TypeOptions() {
+  const { meta, t, typeLabel } = useApp();
+  const groups = new Map();
+  for (const x of meta.taskTypes) {
+    const group = x.group || 'general';
+    groups.set(group, [...(groups.get(group) || []), x]);
+  }
+  return [...groups].map(([group, types]) => (
+    <optgroup key={group} label={t(`typeGroup.${group}`)}>
+      {types.map((x) => (
+        <option key={x.key} value={x.key}>
+          {typeLabel(x.key)}
+        </option>
+      ))}
+    </optgroup>
+  ));
+}
+
+// <option>s for a track <select>, after an empty "none" option.
+export function TrackOptions({ none }) {
+  const { meta, trackLabel } = useApp();
+  return (
+    <>
+      <option value="">{none}</option>
+      {meta.tracks.map((x) => (
+        <option key={x.key} value={x.key}>
+          {trackLabel(x.key)}
+        </option>
+      ))}
+    </>
+  );
+}
+
 export function CallStatusPill({ status }) {
   const { callStatusLabel } = useApp();
   return <span className={`pill call-${status}`}>{callStatusLabel(status)}</span>;
