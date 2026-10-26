@@ -95,6 +95,12 @@ export function AppProvider({ children }) {
     if (user) api.get('/users').then(setUsers).catch(() => {});
   }, [user, version]);
 
+  // Current and upcoming deputies involving this user (see the Team page's Cover tab).
+  const [delegations, setDelegations] = useState([]);
+  useEffect(() => {
+    if (user) api.get('/delegations').then(setDelegations).catch(() => {});
+  }, [user, version]);
+
   const signIn = (token, u) => {
     setToken(token);
     adoptUserLang(u);
@@ -123,6 +129,8 @@ export function AppProvider({ children }) {
     const find = (list, key) => list?.find((x) => x.key === key)?.label;
     const roleLabel = (role) => label('role', role, meta?.roles[role]?.label);
     const deptOf = (role) => meta?.roles[role]?.department;
+    const isCsManager = (role) => deptOf(role) === 'customer_service' && meta?.roles[role]?.level !== 'member';
+    const covering = user ? delegations.filter((d) => d.active && d.deputy_id === user.id) : [];
     const locale = localeOf(lang);
     setActiveLocale(locale);
     return {
@@ -137,7 +145,13 @@ export function AppProvider({ children }) {
       trackLabel: (k) => label('track', k, find(meta?.tracks, k)),
       projectStatusLabel: (k) => label('pstatus', k, find(meta?.projectStatuses, k)),
       callStatusLabel: (k) => label('callStatus', k, find(meta?.callStatuses, k)),
-      canUseCalls: user ? user.role === 'ceo' || meta?.roles[user.role]?.department === 'customer_service' : false,
+      canUseCalls: user ? user.role === 'ceo' || meta?.roles[user.role]?.department === 'customer_service' || covering.some((d) => isCsManager(d.user_role)) : false,
+      // Managing calls: CS managers and team leaders, or acting for one today.
+      canManageCalls: user ? user.role === 'ceo' || isCsManager(user.role) || covering.some((d) => isCsManager(d.user_role)) : false,
+      delegations,
+      // Managers this user is acting for today, and who is acting for this user.
+      covering,
+      coveredBy: user ? delegations.filter((d) => d.active && d.user_id === user.id) : [],
       user,
       setUser,
       meta,
@@ -156,11 +170,11 @@ export function AppProvider({ children }) {
       deptOf,
       deptLabel: (d) => label('dept', d, meta?.departments[d]?.label),
       deptColor: (d) => meta?.departments[d]?.color ?? '#64748b',
-      isManager: user ? meta?.roles[user.role]?.level !== 'member' : false,
+      isManager: user ? meta?.roles[user.role]?.level !== 'member' || covering.length > 0 : false,
       isUserAdmin: user ? meta?.userAdminRoles.includes(user.role) : false,
       userById: (id) => users.find((u) => u.id === id),
     };
-  }, [user, meta, users, booting, bootError, boot, version, refresh, logout, notify, toast, lang, setLang]);
+  }, [user, meta, users, delegations, booting, bootError, boot, version, refresh, logout, notify, toast, lang, setLang]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

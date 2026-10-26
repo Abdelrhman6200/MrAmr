@@ -26,6 +26,7 @@ export const ROLES = {
   content_quality: { label: 'Content Quality', department: 'systems_ops', level: 'member' },
   ops_qc: { label: 'Ops QC', department: 'systems_ops', level: 'member' },
   cs_head: { label: 'Head of Customer Service', department: 'customer_service', level: 'manager' },
+  cs_team_lead: { label: 'Customer Service Team Leader', department: 'customer_service', level: 'manager' },
   cs_member: { label: 'Customer Service Agent', department: 'customer_service', level: 'member' },
   product_owner: { label: 'Product Owner', department: 'product', level: 'manager' },
   platform_member: { label: 'Platform Team Member', department: 'product', level: 'member' },

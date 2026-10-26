@@ -6,8 +6,11 @@
 //   they own or are a member of.
 // - Tasks can be assigned to yourself, your reporting line, or any manager
 //   (so e.g. Customer Service can raise a bug with the Product Owner).
+// - A deputy acting for a manager (a delegation covering today) also has that
+//   manager's reporting line and reviews, as if it were their own.
 import { bump, readCounter } from './db.js';
 import { isManagerRole, USER_ADMIN_ROLES } from './meta.js';
+import { localDate } from './time.js';
 
 export const isCeo = (user) => user.role === 'ceo';
 
@@ -19,17 +22,34 @@ export function makeAccess(db) {
   let orgVersion = -1;
 
   // `known`: the current version if the caller already read it (saves a round trip).
+  // Delegations start and end by date, so the copy is also refreshed each new day.
   async function sync(known) {
     const version = known ?? (await readCounter(db, 'org'));
-    if (org && version === orgVersion) return;
-    const rows = await db.all('SELECT id, manager_id, role, active FROM users');
+    const today = localDate();
+    if (org && version === orgVersion && org.day === today) return;
+    const [rows, cover] = await Promise.all([
+      db.all('SELECT id, manager_id, role, active FROM users'),
+      db.all(
+        `SELECT d.user_id, d.deputy_id FROM delegations d JOIN users u ON u.id = d.user_id AND u.active = 1
+         WHERE d.starts_on <= ? AND d.ends_on >= ?`,
+        [today, today],
+      ),
+    ]);
     const children = new Map();
     for (const r of rows) {
       if (r.manager_id == null) continue;
       if (!children.has(r.manager_id)) children.set(r.manager_id, []);
       children.get(r.manager_id).push(r.id);
     }
-    org = { rows, children, reports: new Map() };
+    const covering = new Map(); // deputy -> managers they act for today
+    const deputies = new Map(); // manager -> their deputies today
+    for (const d of cover) {
+      if (!covering.has(d.deputy_id)) covering.set(d.deputy_id, new Set());
+      covering.get(d.deputy_id).add(d.user_id);
+      if (!deputies.has(d.user_id)) deputies.set(d.user_id, []);
+      deputies.get(d.user_id).push(d.deputy_id);
+    }
+    org = { rows, children, reports: new Map(), effective: new Map(), covering, deputies, day: today };
     orgVersion = version;
   }
 
@@ -44,8 +64,28 @@ export function makeAccess(db) {
     return org;
   };
 
-  // Everyone below userId in the org chart. Returned sets are shared: don't mutate.
+  // Managers userId is acting for today, and the deputies acting for userId.
+  const covering = (userId) => chart().covering.get(userId) || new Set();
+  const deputiesOf = (userId) => chart().deputies.get(userId) || [];
+  const roleOf = (userId) => chart().rows.find((r) => r.id === userId)?.role;
+  // Manager rights: a manager role, or acting for a manager today.
+  const actsAsManager = (user) => isManagerRole(user.role) || covering(user.id).size > 0;
+
+  // Everyone below userId, including the reporting lines of managers they act
+  // for today. Returned sets are shared: don't mutate.
   function reportsOf(userId) {
+    const { effective } = chart();
+    const cover = covering(userId);
+    if (!cover.size) return ownReports(userId);
+    if (effective.has(userId)) return effective.get(userId);
+    const out = new Set(ownReports(userId));
+    for (const m of cover) for (const id of ownReports(m)) if (id !== userId) out.add(id);
+    effective.set(userId, out);
+    return out;
+  }
+
+  // Everyone below userId in the org chart itself.
+  function ownReports(userId) {
     const { children, reports } = chart();
     if (reports.has(userId)) return reports.get(userId);
     const out = new Set();
@@ -60,13 +100,13 @@ export function makeAccess(db) {
     return out;
   }
 
-  // Self + everyone below in the org chart.
-  const teamIds = (user) => new Set([user.id, ...reportsOf(user.id)]);
+  // Self + everyone below in the org chart (+ the managers acted for, whose own work a deputy sees).
+  const teamIds = (user) => new Set([user.id, ...reportsOf(user.id), ...covering(user.id)]);
 
   const managesUser = (user, otherId) => isCeo(user) || reportsOf(user.id).has(otherId);
 
   // Would `newManagerId` as manager of `userId` create a reporting cycle?
-  const wouldCycle = (userId, newManagerId) => newManagerId === userId || reportsOf(userId).has(newManagerId);
+  const wouldCycle = (userId, newManagerId) => newManagerId === userId || ownReports(userId).has(newManagerId);
 
   const projectById = (id) => db.get('SELECT id, owner_id FROM projects WHERE id = ?', [id]);
 
@@ -142,7 +182,7 @@ export function makeAccess(db) {
   // Reviewer can approve; so can anyone managing the reviewer or the CEO.
   function canReviewTask(user, task) {
     if (task.reviewer_id == null) return false;
-    return isCeo(user) || task.reviewer_id === user.id || reportsOf(user.id).has(task.reviewer_id);
+    return isCeo(user) || task.reviewer_id === user.id || reportsOf(user.id).has(task.reviewer_id) || covering(user.id).has(task.reviewer_id);
   }
 
   async function assignableIds(user, projectId = null) {
@@ -168,6 +208,11 @@ export function makeAccess(db) {
     sync,
     invalidate,
     reportsOf,
+    ownReports,
+    covering,
+    deputiesOf,
+    roleOf,
+    actsAsManager,
     teamIds,
     managesUser,
     wouldCycle,

@@ -75,7 +75,7 @@ export function LanguageSwitch({ className = '' }) {
 }
 
 function Notifications() {
-  const { version, t } = useApp();
+  const { version, t, userById } = useApp();
   const { open: openTask } = useTaskDialog();
   const navigate = useNavigate();
   const [data, setData] = useState({ unread: 0, items: [] });
@@ -104,7 +104,11 @@ function Notifications() {
   };
 
   // Rebuild the message in the current language when we have its parts.
-  const text = (n) => (n.params ? t(`notif.${n.type}`, { ...n.params, day: n.params.day && t(`day.${n.params.day}`) }) : n.message);
+  // `for`: a copy sent to the deputy of the person it was meant for.
+  const text = (n) => {
+    const body = n.params ? t(`notif.${n.type}`, { ...n.params, day: n.params.day && t(`day.${n.params.day}`) }) : n.message;
+    return n.params?.for ? `${t('notif.for', { name: userById(n.params.for)?.name || '' })} ${body}` : body;
+  };
 
   return (
     <div className="notif" ref={ref}>

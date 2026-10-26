@@ -10,7 +10,7 @@
 const NOW = "to_char(timezone('UTC', now()), 'YYYY-MM-DD HH24:MI:SS')";
 
 // Bump when the schema below changes; startup re-applies it once.
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -95,6 +95,19 @@ CREATE TABLE IF NOT EXISTS checklist_items (
 );
 -- Added in schema 6: an SOP step that must be ticked before the task goes to review or is done.
 ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS required INTEGER NOT NULL DEFAULT 0;
+
+-- Added in schema 7: someone acting for a manager (ينوب عنه) between two dates, inclusive.
+CREATE TABLE IF NOT EXISTS delegations (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deputy_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  starts_on TEXT NOT NULL,
+  ends_on TEXT NOT NULL,
+  note TEXT DEFAULT '',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT ${NOW}
+);
+CREATE INDEX IF NOT EXISTS idx_delegations_dates ON delegations(ends_on, starts_on);
 
 CREATE TABLE IF NOT EXISTS comments (
   id SERIAL PRIMARY KEY,

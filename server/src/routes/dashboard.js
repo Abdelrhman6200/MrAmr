@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { TASK_SELECT, PRIORITY_ORDER } from './tasks.js';
-import { DEPARTMENTS, ROLES, isManagerRole } from '../meta.js';
+import { DEPARTMENTS, ROLES } from '../meta.js';
 import { DAY, localDate, utcAgo } from '../time.js';
 
 export default function dashboardRoutes({ db, access }) {
@@ -10,7 +10,7 @@ export default function dashboardRoutes({ db, access }) {
     const me = req.user;
     const today = localDate();
     const scope = await access.taskScope(me);
-    const ids = isManagerRole(me.role) ? [...access.reportsOf(me.id)] : [];
+    const ids = access.actsAsManager(me) ? [...access.reportsOf(me.id)] : [];
     const [mineCounts, overdue, upcoming, reviewQueue, waitingOnOthers, team, activity] = await Promise.all([
       db.all('SELECT status, COUNT(*) AS n FROM tasks WHERE assignee_id = ? GROUP BY status', [me.id]),
       db.all(`${TASK_SELECT} WHERE t.assignee_id = ? AND t.status != 'done' AND t.due_date < ? ORDER BY t.due_date LIMIT 20`, [me.id, today]),
@@ -19,7 +19,8 @@ export default function dashboardRoutes({ db, access }) {
          ORDER BY t.due_date IS NULL, t.due_date, ${PRIORITY_ORDER} LIMIT 10`,
         [me.id, today],
       ),
-      db.all(`${TASK_SELECT} WHERE t.reviewer_id = ? AND t.status = 'in_review' ORDER BY t.updated_at`, [me.id]),
+      // Including the reviews of managers this person is acting for today.
+      db.all(`${TASK_SELECT} WHERE t.reviewer_id = ANY(?::int[]) AND t.status = 'in_review' ORDER BY t.updated_at`, [[me.id, ...access.covering(me.id)]]),
       db.all(
         `${TASK_SELECT} WHERE t.reporter_id = ? AND (t.assignee_id IS NULL OR t.assignee_id != ?) AND t.status != 'done'
          ORDER BY t.due_date IS NULL, t.due_date LIMIT 10`,

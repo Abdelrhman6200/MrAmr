@@ -22,7 +22,7 @@ const DATETIME_RE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?)?$/;
 
 const inCs = (user) => departmentOf(user.role) === 'customer_service';
 export const canUseCalls = (user) => user.role === 'ceo' || inCs(user);
-const isCallManager = (user) => user.role === 'ceo' || (inCs(user) && isManagerRole(user.role));
+const isCsManagerRole = (role) => departmentOf(role) === 'customer_service' && isManagerRole(role);
 
 const cell = (v, max = 300) => String(v ?? '').trim().slice(0, max);
 
@@ -40,8 +40,11 @@ function cleanRows(rows) {
     .filter((row) => row.name || row.phone);
 }
 
-export default function callRoutes({ db }) {
+export default function callRoutes({ db, access }) {
   const r = Router();
+  // Customer Service managers and team leaders, and whoever is acting for one today.
+  const isCallManager = (user) =>
+    user.role === 'ceo' || (inCs(user) && isManagerRole(user.role)) || [...access.covering(user.id)].some((id) => isCsManagerRole(access.roleOf(id)));
   const notify = (q, userId, message, link, params) =>
     q.run('INSERT INTO notifications (user_id, type, message, link, params) VALUES (?, ?, ?, ?, ?)', [
       userId,

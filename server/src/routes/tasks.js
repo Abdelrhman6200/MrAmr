@@ -69,15 +69,19 @@ export default function taskRoutes({ db, access }) {
       detail,
     ]);
   // `message` is the English fallback; `params` lets the client render it in any language.
+  // Whoever is acting for the person today gets a copy (`for`: on whose behalf).
   const notify = async (q, actor, userId, type, message, taskId, title) => {
-    if (userId == null || userId === actor.id) return;
-    await q.run('INSERT INTO notifications (user_id, type, message, task_id, params) VALUES (?, ?, ?, ?, ?)', [
-      userId,
-      type,
-      message,
-      taskId,
-      JSON.stringify({ actor: actor.name, title }),
-    ]);
+    if (userId == null) return;
+    const to = [[userId, {}], ...access.deputiesOf(userId).map((id) => [id, { for: userId }])].filter(([id]) => id !== actor.id);
+    for (const [id, extra] of to) {
+      await q.run('INSERT INTO notifications (user_id, type, message, task_id, params) VALUES (?, ?, ?, ?, ?)', [
+        id,
+        type,
+        message,
+        taskId,
+        JSON.stringify({ actor: actor.name, title, ...extra }),
+      ]);
+    }
   };
 
   const raw = (id, q = db) => q.get('SELECT * FROM tasks WHERE id = ?', [id]);
@@ -148,7 +152,7 @@ export default function taskRoutes({ db, access }) {
         add('t.reporter_id = ?', req.user.id);
         break;
       case 'review':
-        add("t.reviewer_id = ? AND t.status = 'in_review'", req.user.id);
+        add("t.reviewer_id = ANY(?::int[]) AND t.status = 'in_review'", [req.user.id, ...access.covering(req.user.id)]);
         break;
       case 'team':
         add('t.assignee_id = ANY(?::int[])', [...access.reportsOf(req.user.id)]);

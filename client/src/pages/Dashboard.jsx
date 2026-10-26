@@ -31,7 +31,7 @@ function Stat({ label, value, tone, to, icon }) {
 }
 
 export default function Dashboard() {
-  const { user, version, roleLabel, isManager, t, canUseCalls } = useApp();
+  const { user, version, roleLabel, isManager, t, canUseCalls, covering, coveredBy } = useApp();
   const [data, setData] = useState(null);
   const [calls, setCalls] = useState(null);
   const [pendingRound, setPendingRound] = useState(null);
@@ -63,6 +63,17 @@ export default function Dashboard() {
           <p className="muted">{user.title || roleLabel(user.role)}</p>
         </div>
       </div>
+
+      {covering.map((d) => (
+        <Link key={d.id} to="/team?tab=cover" className="alert info banner">
+          <Icon name="team" size={16} /> {t('cover.youAct', { name: d.user_name, date: formatDate(d.ends_on) })} →
+        </Link>
+      ))}
+      {coveredBy.map((d) => (
+        <Link key={d.id} to="/team?tab=cover" className="alert info banner">
+          <Icon name="team" size={16} /> {t('cover.actsForYou', { name: d.deputy_name, date: formatDate(d.ends_on) })} →
+        </Link>
+      ))}
 
       {pendingRound && (
         <Link to="/centers?tab=mine" className="alert warning banner">

@@ -30,8 +30,7 @@ const OUTCOMES = ['reached', 'no_answer', 'callback', 'not_interested', 'wrong_n
 const MAX_ROWS = 5000;
 
 function useCallManager() {
-  const { user, meta } = useApp();
-  return user.role === 'ceo' || (meta.roles[user.role]?.department === 'customer_service' && meta.roles[user.role]?.level !== 'member');
+  return useApp().canManageCalls;
 }
 
 function useParam(name) {

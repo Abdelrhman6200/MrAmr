@@ -49,6 +49,7 @@ const ID_TABLES = [
   'availability',
   'notifications',
   'center_assignments',
+  'delegations',
 ];
 
 // Rows are collected first and written in a few bulk statements by flush():
@@ -251,6 +252,7 @@ export async function seed(db, { ceo = null } = {}) {
 
     await academicSample(prepare, ids, hash);
     await platformSample(prepare, ids, hash);
+    await csLeadSample(prepare, ids, hash);
 
     // Customer Service call list
     const callList = (
@@ -461,11 +463,38 @@ async function platformSample(prepare, ids, hash) {
   await task(term, 'Complaint: my forum post was removed', 'complaint', 'todo', 'low', 'plat2', raisedBy, 3, { tags: 'forum', checklist: sop('complaint') });
 }
 
+// A Customer Service team leader with an agent of her own, who will act for the
+// Head of Customer Service during her leave.
+const CS_LEAD_PEOPLE = [
+  ['csl', 'Nourhan Said', 'cs.lead@taskflow.local', 'cs_team_lead', 'cs', '#be185d'],
+  ['cs3', 'Youssef Hamdy', 'support3@taskflow.local', 'cs_member', 'csl', '#f9a8d4'],
+];
+
+async function csLeadSample(prepare, ids, hash) {
+  if (!ids.cs) return;
+  const insUser = prepare('INSERT INTO users (name, email, password_hash, role, title, manager_id, avatar_color) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  for (const [key, name, email, role, mgr, color] of CS_LEAD_PEOPLE) {
+    ids[key] = (await insUser.run(name, email, hash, role, null, ids[mgr], color)).lastInsertRowid;
+  }
+  const { task } = sampleHelpers(prepare, ids);
+  const sop = (type, done = 0) => SOPS[type].en.steps.map((s, i) => [s.text, i < done, s.required]);
+  await task(null, 'Listen to 5 recorded calls and score them', 'support', 'in_progress', 'medium', 'csl', 'cs', 2, { tags: 'quality' });
+  await task(null, 'Train Youssef on the refund script', 'support', 'todo', 'high', 'csl', 'cs', 4, { tags: 'training' });
+  await task(null, 'Student cannot open Lesson 4 on his phone', 'support', 'in_progress', 'high', 'cs3', 'csl', 0, {
+    reviewer: 'csl',
+    checklist: sop('support', 2),
+  });
+  await prepare('INSERT INTO delegations (user_id, deputy_id, starts_on, ends_on, note, created_by) VALUES (?, ?, ?, ?, ?, ?)').run(
+    ids.cs, ids.csl, day(3), day(9), 'Annual leave', ids.cs,
+  );
+}
+
 // Sample parts added after a site first loaded the sample: each is added once
 // (its counter marks it), under the Head of Company the sample belongs to.
 const SAMPLE_PARTS = [
   { counter: 'sample_academic', marker: 'academic.head@taskflow.local', add: academicSample },
   { counter: 'sample_platform', marker: 'platform1@taskflow.local', add: platformSample },
+  { counter: 'sample_cs_lead', marker: 'cs.lead@taskflow.local', add: csLeadSample },
 ];
 
 export async function upgradeSample(db) {
@@ -506,6 +535,7 @@ export async function upgradeSample(db) {
 
 // Tables in the order their sample rows can be deleted.
 const SAMPLE_TABLES = [
+  'delegations',
   'notifications',
   'activity',
   'comments',

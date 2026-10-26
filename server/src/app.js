@@ -15,6 +15,7 @@ import callRoutes from './routes/calls.js';
 import centerRoutes from './routes/centers.js';
 import adminRoutes from './routes/admin.js';
 import sopRoutes from './routes/sops.js';
+import delegationRoutes from './routes/delegations.js';
 import { cors, securityHeaders } from './security.js';
 import { createMailer, emailDispatcher } from './mail.js';
 import { background } from './background.js';
@@ -127,6 +128,7 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
   api.use('/centers', centerRoutes(ctx));
   api.use('/admin', adminRoutes(ctx));
   api.use('/sops', sopRoutes(ctx));
+  api.use('/delegations', delegationRoutes(ctx));
   api.use((_req, _res, next) => next(new HttpError(404, 'Unknown API route')));
   app.use('/api', api);
 

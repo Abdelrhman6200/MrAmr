@@ -15,6 +15,7 @@ const DEMO = [
   ['content_quality', 'quality@taskflow.local'],
   ['ops_qc', 'qc@taskflow.local'],
   ['cs_head', 'cs.head@taskflow.local'],
+  ['cs_team_lead', 'cs.lead@taskflow.local'],
   ['cs_member', 'support1@taskflow.local'],
   ['product_owner', 'product@taskflow.local'],
 ];

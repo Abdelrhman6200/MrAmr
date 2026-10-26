@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context.jsx';
 import { Avatar, DeptTag } from '../components/ui.jsx';
 import Icon from '../components/Icon.jsx';
+import Cover from './Cover.jsx';
 
 function Node({ user, childrenOf, depth = 0 }) {
   const { roleLabel, deptOf, user: me, t } = useApp();
@@ -44,7 +45,9 @@ function Node({ user, childrenOf, depth = 0 }) {
 
 export default function Team() {
   const { users, meta, deptOf, t, deptLabel, roleLabel } = useApp();
-  const [mode, setMode] = useState('chart');
+  const [params, setParams] = useSearchParams();
+  const mode = params.get('tab') || 'chart';
+  const setMode = (tab) => setParams(tab === 'chart' ? {} : { tab });
   const ids = new Set(users.map((u) => u.id));
   const childrenOf = new Map();
   const roots = [];
@@ -69,9 +72,14 @@ export default function Team() {
           <button className={mode === 'dept' ? 'active' : ''} onClick={() => setMode('dept')}>
             {t('team.byDept')}
           </button>
+          <button className={mode === 'cover' ? 'active' : ''} onClick={() => setMode('cover')}>
+            {t('cover.tab')}
+          </button>
         </div>
       </div>
-      {mode === 'chart' ? (
+      {mode === 'cover' ? (
+        <Cover />
+      ) : mode === 'chart' ? (
         <ul className="org panel">
           {roots.map((r) => (
             <Node key={r.id} user={r} childrenOf={childrenOf} />
