@@ -225,15 +225,15 @@ const BUILT_IN = {
   exam_proctoring: {
     en: {
       when: 'Supervising an exam at a center.',
-      target: 'At the hall 30 minutes before the start.',
-      steps: ['!Arrive 30 minutes before the exam', '!Check the papers and the number of students', 'Check student names and seating', '!Proctor without leaving the hall', '!Collect and count the papers', '!Hand the papers to the person grading'],
-      done: 'The number of papers handed over matches the number of students.',
+      target: 'In the hall before the exam starts.',
+      steps: ['!Go into the exam hall before the start', '!Take the section the head of the halls assigns you', '!Proctor your section without leaving it', '!Collect your section’s papers', '!Hand the papers to the head of the halls'],
+      done: 'Your section was proctored and all its papers are with the head of the halls.',
     },
     ar: {
       when: 'مراقبة امتحان في سنتر.',
-      target: 'في القاعة قبل البداية بنص ساعة.',
-      steps: ['!احضر قبل الامتحان بنص ساعة', '!راجع الورق وعدد الطلبة', 'راجع أسماء الطلبة وأماكن القعدة', '!راقب من غير ما تسيب القاعة', '!اجمع الورق وعدّه', '!سلّم الورق للي هيصحح'],
-      done: 'عدد الورق المسلّم مطابق لعدد الطلبة.',
+      target: 'في القاعة قبل بداية الامتحان.',
+      steps: ['!ادخل القاعة قبل بداية الامتحان', '!استلم القسم اللي رئيس القاعات يحددهولك', '!راقب القسم بتاعك من غير ما تسيبه', '!اجمع ورق القسم بتاعك', '!سلّم الورق لرئيس القاعات'],
+      done: 'القسم بتاعك اتراقب، وكل ورقه مع رئيس القاعات.',
     },
   },
   exam_grading: {

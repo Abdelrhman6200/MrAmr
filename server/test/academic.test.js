@@ -148,7 +148,7 @@ test('new tasks start with their type’s SOP, which the responsible managers ca
     return (await who.call('GET', `/tasks/${t.id}`)).body.checklist.map((c) => (c.required ? `!${c.text}` : c.text));
   };
 
-  assert.equal((await checklist(asst, { title: 'Proctor', type: 'exam_proctoring' }))[0], '!Arrive 30 minutes before the exam');
+  assert.equal((await checklist(asst, { title: 'Proctor', type: 'exam_proctoring' }))[0], '!Go into the exam hall before the start');
   // An explicit checklist (even an empty one) wins.
   assert.deepEqual(await checklist(asst, { title: 'Proctor 2', type: 'exam_proctoring', checklist: [] }), []);
 
@@ -167,7 +167,7 @@ test('new tasks start with their type’s SOP, which the responsible managers ca
   assert.equal((await ceo.call('PUT', '/sops/exam_proctoring', { steps: [] })).status, 200);
   assert.equal((await asst.call('GET', '/sops')).body.exam_proctoring, undefined);
   await asst.call('PATCH', `/users/${asst.user.id}`, { language: 'ar' });
-  assert.equal((await checklist(asst, { title: 'مراقبة', type: 'exam_proctoring' }))[0], '!احضر قبل الامتحان بنص ساعة');
+  assert.equal((await checklist(asst, { title: 'مراقبة', type: 'exam_proctoring' }))[0], '!ادخل القاعة قبل بداية الامتحان');
 
   // A task with an empty checklist can take its SOP's steps later.
   const bare = (await asst.call('POST', '/tasks', { title: 'Bare', type: 'exam_grading', checklist: [] })).body;
