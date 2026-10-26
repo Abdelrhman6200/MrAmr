@@ -36,11 +36,13 @@ export default function TaskForm() {
     api.get('/projects').then(setProjects).catch(() => {});
   }, []);
   useEffect(() => {
-    if (sops && !ownChecklist) setForm((f) => ({ ...f, checklist: sopSteps(f.type, lang, sops).join('\n') }));
+    if (sops && !ownChecklist) setForm((f) => ({ ...f, checklist: sopSteps(f.type, lang, sops).map((s) => s.text).join('\n') }));
   }, [form.type, sops, lang, ownChecklist]);
   useEffect(() => {
     api.get('/users/assignable', { project_id: form.project_id }).then(setAssignable).catch(() => {});
   }, [form.project_id]);
+
+  const required = new Set(sops ? sopSteps(form.type, lang, sops).filter((s) => s.required).map((s) => s.text) : []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -50,7 +52,8 @@ export default function TaskForm() {
       const created = await api.post('/tasks', {
         ...form,
         // Still loading the SOPs: let the server add them.
-        checklist: ownChecklist || sops ? form.checklist.split('\n').map((s) => s.trim()).filter(Boolean) : undefined,
+        // Steps kept from the SOP keep their required mark.
+        checklist: ownChecklist || sops ? form.checklist.split('\n').map((s) => s.trim()).filter(Boolean).map((text) => ({ text, required: required.has(text) })) : undefined,
       });
       refresh();
       notify(t('form.created'), 'success');
@@ -154,7 +157,7 @@ export default function TaskForm() {
           </label>
         </div>
         <label>
-          {t('form.checklist')} <span className="hint">{ownChecklist ? t('form.checklistHint') : t('form.checklistSop')}</span>
+          {t('form.checklist')} <span className="hint">{ownChecklist ? t('form.checklistHint') : t('form.checklistSop')}{required.size > 0 && ` · ${t('sop.formRequired', { n: required.size })}`}</span>
           <textarea
             rows={Math.min(Math.max(form.checklist.split('\n').length, 3), 8)}
             value={form.checklist}

@@ -117,7 +117,7 @@ function sampleHelpers(prepare, ids) {
     `INSERT INTO tasks (project_id, title, description, type, status, priority, assignee_id, reporter_id, reviewer_id, due_date, estimate_hours, tags, track, weekly_key, completed_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
-  const insCheck = prepare('INSERT INTO checklist_items (task_id, text, done, position) VALUES (?, ?, ?, ?)');
+  const insCheck = prepare('INSERT INTO checklist_items (task_id, text, done, position, required) VALUES (?, ?, ?, ?, ?)');
   const insComment = prepare('INSERT INTO comments (task_id, user_id, body) VALUES (?, ?, ?)');
   const insActivity = prepare('INSERT INTO activity (task_id, project_id, user_id, action, detail) VALUES (?, ?, ?, ?, ?)');
   const task = async (p, title, type, status, priority, assignee, reporter, due, opts = {}) => {
@@ -139,7 +139,8 @@ function sampleHelpers(prepare, ids) {
       status === 'done' ? daysAgoUtc(opts.doneAgo ?? 2) : null,
     );
     await insActivity.run(id, p, ids[reporter], 'created', title);
-    for (const [i, [text, done]] of (opts.checklist || []).entries()) await insCheck.run(id, text, done ? 1 : 0, i);
+    // Checklist entries: [text, done, required].
+    for (const [i, [text, done, required]] of (opts.checklist || []).entries()) await insCheck.run(id, text, done ? 1 : 0, i, required ? 1 : 0);
     for (const [who, body] of opts.comments || []) await insComment.run(id, ids[who], body);
     return id;
   };
@@ -393,7 +394,7 @@ async function academicSample(prepare, ids, hash) {
       week: last,
       doneAgo: 2,
       desc: 'Every week: solve the three external books, the teacher’s book and the exam, and attend the class.',
-      checklist: items.map((text, i) => [text, i < done]),
+      checklist: items.map((text, i) => [text, i < done, true]),
     });
   }
 }
@@ -415,7 +416,7 @@ async function platformSample(prepare, ids, hash) {
   const members = ['plat1', 'plat2', ...['cs', 'hoc'].filter((k) => ids[k])];
   const term = await project('Online platform — Term 1', 'What goes on the platform and when: lessons, exams, forums and student complaints.', 'product', 'po', members, '#22c55e', 90);
   // The SOP as a checklist, with the first `done` steps ticked.
-  const sop = (type, done = 0) => SOPS[type].en.map((text, i) => [text, i < done]);
+  const sop = (type, done = 0) => SOPS[type].en.steps.map((s, i) => [s.text, i < done, s.required]);
 
   // Upload schedule: one physics lesson a week, chemistry alongside.
   const physics = ['Motion & Velocity', 'Newton’s Laws', 'Work & Energy', 'Momentum', 'Circular Motion', 'Gravity', 'Waves', 'Sound'];

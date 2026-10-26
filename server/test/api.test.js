@@ -94,6 +94,15 @@ test('content review workflow: in_review -> changes -> approve', async () => {
 
   // Assignee cannot skip review.
   assert.equal((await api('ins1', 'PATCH', `/tasks/${id}`, { status: 'done' })).status, 400);
+  // The content SOP's required steps come first.
+  const early = await api('ins1', 'PATCH', `/tasks/${id}`, { status: 'in_review' });
+  assert.equal(early.status, 400);
+  assert.equal(early.body.code, 'required_steps');
+  assert.equal(early.body.details.steps[0], 'Write the script and get it approved by the Head of Content');
+  const { checklist } = (await api('ins1', 'GET', `/tasks/${id}`)).body;
+  // The assignee can't delete a required step to get past it.
+  assert.equal((await api('ins1', 'DELETE', `/tasks/${id}/checklist/${checklist[0].id}`)).status, 403);
+  for (const c of checklist.filter((c) => c.required)) await api('ins1', 'PATCH', `/tasks/${id}/checklist/${c.id}`, { done: true });
   assert.equal((await api('ins1', 'PATCH', `/tasks/${id}`, { status: 'in_review' })).status, 200);
 
   // Assignee cannot approve their own work.

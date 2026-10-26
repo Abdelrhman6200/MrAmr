@@ -145,25 +145,40 @@ test('new tasks start with their type’s SOP, which the responsible managers ca
   const ceo = await signIn('ceo@taskflow.local');
   const checklist = async (who, body) => {
     const t = (await who.call('POST', '/tasks', body)).body;
-    return (await who.call('GET', `/tasks/${t.id}`)).body.checklist.map((c) => c.text);
+    return (await who.call('GET', `/tasks/${t.id}`)).body.checklist.map((c) => (c.required ? `!${c.text}` : c.text));
   };
 
-  assert.equal((await checklist(asst, { title: 'Proctor', type: 'exam_proctoring' }))[0], 'Arrive 30 minutes before the exam');
+  assert.equal((await checklist(asst, { title: 'Proctor', type: 'exam_proctoring' }))[0], '!Arrive 30 minutes before the exam');
   // An explicit checklist (even an empty one) wins.
   assert.deepEqual(await checklist(asst, { title: 'Proctor 2', type: 'exam_proctoring', checklist: [] }), []);
 
   assert.equal((await asst.call('PUT', '/sops/exam_proctoring', { steps: ['x'] })).status, 403);
   assert.equal((await cs.call('PUT', '/sops/exam_proctoring', { steps: ['x'] })).status, 403, 'not their team’s work');
   assert.equal((await cs.call('PUT', '/sops/support', { steps: ['Greet the student', ' ', 'Solve it'] })).status, 200);
-  const saved = await head.call('PUT', '/sops/exam_proctoring', { steps: ['Be there at 9:30', 'Count the papers'] });
-  assert.deepEqual(saved.body.exam_proctoring.steps, ['Be there at 9:30', 'Count the papers']);
+  const saved = await head.call('PUT', '/sops/exam_proctoring', { target: 'At the hall by 9:30', steps: [{ text: 'Be there at 9:30', required: true }, 'Count the papers'] });
+  assert.deepEqual(saved.body.exam_proctoring.steps, [{ text: 'Be there at 9:30', required: true }, { text: 'Count the papers', required: false }]);
+  assert.equal(saved.body.exam_proctoring.target, 'At the hall by 9:30');
+  assert.equal(saved.body.exam_proctoring.version, 1);
+  assert.equal((await head.call('PUT', '/sops/exam_proctoring', { steps: ['!Be there at 9:30', 'Count the papers'] })).body.exam_proctoring.version, 2);
   assert.equal(saved.body.support.steps.length, 2);
-  assert.deepEqual(await checklist(asst, { title: 'Proctor 3', type: 'exam_proctoring' }), ['Be there at 9:30', 'Count the papers']);
+  assert.deepEqual(await checklist(asst, { title: 'Proctor 3', type: 'exam_proctoring' }), ['!Be there at 9:30', 'Count the papers']);
 
   // Back to the built-in steps, in the creator's language.
   assert.equal((await ceo.call('PUT', '/sops/exam_proctoring', { steps: [] })).status, 200);
   assert.equal((await asst.call('GET', '/sops')).body.exam_proctoring, undefined);
   await asst.call('PATCH', `/users/${asst.user.id}`, { language: 'ar' });
-  assert.equal((await checklist(asst, { title: 'مراقبة', type: 'exam_proctoring' }))[0], 'احضر قبل الامتحان بنص ساعة');
+  assert.equal((await checklist(asst, { title: 'مراقبة', type: 'exam_proctoring' }))[0], '!احضر قبل الامتحان بنص ساعة');
+
+  // A task with an empty checklist can take its SOP's steps later.
+  const bare = (await asst.call('POST', '/tasks', { title: 'Bare', type: 'exam_grading', checklist: [] })).body;
+  assert.equal((await asst.call('POST', `/tasks/${bare.id}/checklist/sop`)).status, 201);
+  const steps = (await asst.call('GET', `/tasks/${bare.id}`)).body.checklist;
+  assert.equal(steps.length, 5);
+  assert.equal(steps.filter((c) => c.required).length, 3);
+
+  // Usage over the tasks the user can see.
+  const stats = (await head.call('GET', '/sops/stats')).body;
+  assert.ok(stats.exam_proctoring.used >= 4);
+  assert.ok(stats.hw_grading.used >= 2 && stats.hw_grading.done_with_date >= 1);
   await asst.call('PATCH', `/users/${asst.user.id}`, { language: 'en' });
 });

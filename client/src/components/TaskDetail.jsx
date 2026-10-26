@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { Avatar, Modal, PriorityTag, StatusPill, TrackPicker, TrackTag, TypeOptions, TypeTag, UserSelect, isOverdue, timeAgo, useSops, useTaskDialog } from './ui.jsx';
-import { sopSteps } from '../sops.js';
+import { sopFor } from '../sops.js';
 import Icon from './Icon.jsx';
 
 function ReviewBox({ task, onDone }) {
@@ -78,12 +78,15 @@ export default function TaskDetail({ id }) {
     );
   if (!task) return null;
 
+  // The required SOP steps still open are listed with the error.
+  const failed = (e) => notify(e.code === 'required_steps' ? `${e.message}: ${e.details.steps.join(' · ')}` : e.message, 'error');
+
   const update = async (patch) => {
     try {
       await api.patch(`/tasks/${task.id}`, patch);
       refresh();
     } catch (e) {
-      notify(e.message, 'error');
+      failed(e);
       load();
     }
   };
@@ -105,10 +108,9 @@ export default function TaskDetail({ id }) {
   };
 
   // A task with an empty checklist can take its type's SOP steps in one go.
-  const addSop = async () => {
-    for (const text of sopSteps(task.type, lang, sops)) await api.post(`/tasks/${task.id}/checklist`, { text });
-    refresh();
-  };
+  const addSop = () => api.post(`/tasks/${task.id}/checklist/sop`).then(refresh, failed);
+  const sop = sops && sopFor(task.type, lang, sops);
+  const requiredLeft = task.checklist.filter((c) => c.required && !c.done).length;
 
   const remove = async () => {
     if (!confirm(t('task.confirmDelete', { title: task.title }))) return;
@@ -178,7 +180,28 @@ export default function TaskDetail({ id }) {
           <section>
             <h4>
               {t('tasks.checklist')} {task.checklist.length > 0 && <span className="muted">{task.checklist.filter((c) => c.done).length}/{task.checklist.length}</span>}
+              {requiredLeft > 0 && task.status !== 'done' && <span className="req-left">{t('sop.requiredLeft', { n: requiredLeft })}</span>}
             </h4>
+            {sop && sop.steps.length > 0 && (
+              <div className="sop-hint">
+                <Icon name="checklist" size={15} />
+                <div>
+                  {sop.target && (
+                    <div>
+                      <b>{t('sop.target')}:</b> {sop.target}
+                    </div>
+                  )}
+                  {sop.done && (
+                    <div>
+                      <b>{t('sop.done')}:</b> {sop.done}
+                    </div>
+                  )}
+                  <Link className="link sm" to={`/sops?type=${task.type}`} onClick={close}>
+                    {t('sop.view')}
+                  </Link>
+                </div>
+              </div>
+            )}
             <ul className="checklist">
               {task.checklist.map((c) => (
                 <li key={c.id}>
@@ -190,16 +213,17 @@ export default function TaskDetail({ id }) {
                       onChange={(e) => api.patch(`/tasks/${task.id}/checklist/${c.id}`, { done: e.target.checked }).then(refresh)}
                     />
                     {c.text}
+                    {c.required && <span className="req-badge">{t('sop.required')}</span>}
                   </label>
                   {!ro && (
-                    <button className="icon-btn sm" onClick={() => api.del(`/tasks/${task.id}/checklist/${c.id}`).then(refresh)} aria-label={t('task.removeItem')}>
+                    <button className="icon-btn sm" onClick={() => api.del(`/tasks/${task.id}/checklist/${c.id}`).then(refresh, failed)} aria-label={t('task.removeItem')}>
                       <Icon name="close" size={14} />
                     </button>
                   )}
                 </li>
               ))}
             </ul>
-            {!ro && task.checklist.length === 0 && sops && sopSteps(task.type, lang, sops).length > 0 && (
+            {!ro && task.checklist.length === 0 && sop?.steps.length > 0 && (
               <button className="btn sm sop-add" onClick={addSop}>
                 <Icon name="checklist" size={14} /> {t('sop.addSteps')}
               </button>

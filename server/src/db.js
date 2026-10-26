@@ -10,7 +10,7 @@
 const NOW = "to_char(timezone('UTC', now()), 'YYYY-MM-DD HH24:MI:SS')";
 
 // Bump when the schema below changes; startup re-applies it once.
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -83,6 +83,8 @@ CREATE TABLE IF NOT EXISTS sops (
   updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   updated_at TEXT NOT NULL DEFAULT ${NOW}
 );
+-- Added in schema 6: each save of an SOP is a new version.
+ALTER TABLE sops ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 
 CREATE TABLE IF NOT EXISTS checklist_items (
   id SERIAL PRIMARY KEY,
@@ -91,6 +93,8 @@ CREATE TABLE IF NOT EXISTS checklist_items (
   done INTEGER NOT NULL DEFAULT 0,
   position INTEGER NOT NULL DEFAULT 0
 );
+-- Added in schema 6: an SOP step that must be ticked before the task goes to review or is done.
+ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS required INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS comments (
   id SERIAL PRIMARY KEY,

@@ -1,9 +1,10 @@
 import { Router } from 'express';
-import { badRequest, forbidden, idParam, notFound, oneOf, optionalDate, optionalId, requiredString } from '../http.js';
+import { HttpError, badRequest, forbidden, idParam, notFound, oneOf, optionalDate, optionalId, requiredString } from '../http.js';
 import { PRIORITIES, ROLES, STATUSES, TASK_TYPES, TRACKS, keys } from '../meta.js';
 import { localDate, nowUtc } from '../time.js';
 import { translate } from '../../../client/src/i18n.js';
 import { stepsFor } from './sops.js';
+import { normaliseSop } from '../../../client/src/sops.js';
 
 export const TASK_SELECT = `
   SELECT t.*, p.name AS project_name, p.color AS project_color,
@@ -34,6 +35,16 @@ function tracks(value) {
   const list = Array.isArray(value) ? value : String(value || '').split(',');
   const picked = new Set(list.map((t) => String(t).trim()).filter(Boolean).map((t) => oneOf(t, keys(TRACKS), 'track')));
   return keys(TRACKS).filter((k) => picked.has(k)).join(',');
+}
+
+// Checklist entries: "text", "!text" for a required step, or { text, required }.
+const checklistItems = (list) =>
+  normaliseSop({ steps: list.slice(0, 200).map((s) => (typeof s === 'string' ? s.trim().slice(0, 500) : { text: String(s?.text || '').trim().slice(0, 500), required: !!s?.required })) }).steps;
+
+// A task can't go to review or be done while required SOP steps are unticked.
+async function checkRequiredSteps(q, taskId) {
+  const left = await q.all('SELECT text FROM checklist_items WHERE task_id = ? AND required = 1 AND done = 0 ORDER BY position, id', [taskId]);
+  if (left.length) throw new HttpError(400, 'Tick the required SOP steps first', 'required_steps', { steps: left.map((r) => r.text) });
 }
 
 function estimate(value) {
@@ -179,7 +190,7 @@ export default function taskRoutes({ db, access }) {
       full(t.id),
       perms(req.user, t),
     ]);
-    res.json({ ...detail, checklist: checklist.map((c) => ({ ...c, done: !!c.done })), comments, activity, ...p });
+    res.json({ ...detail, checklist: checklist.map((c) => ({ ...c, done: !!c.done, required: !!c.required })), comments, activity, ...p });
   });
 
   // ---- create -----------------------------------------------------------
@@ -227,9 +238,13 @@ export default function taskRoutes({ db, access }) {
       if (status === 'in_review') {
         await notify(tx, req.user, reviewerId, 'review_requested', `${req.user.name} requested your review on "${title}"`, task.id, title);
       }
-      const items = checklist.map((s) => String(s).trim().slice(0, 500)).filter(Boolean).slice(0, 200);
+      const items = checklistItems(checklist);
       if (items.length) {
-        await tx.run('INSERT INTO checklist_items (task_id, text, position) SELECT ?, text, pos - 1 FROM unnest(?::text[]) WITH ORDINALITY AS i(text, pos)', [task.id, items]);
+        await tx.run(
+          'INSERT INTO checklist_items (task_id, text, required, position) SELECT ?, i.text, i.required::int, i.pos - 1 FROM unnest(?::text[], ?::boolean[]) WITH ORDINALITY AS i(text, required, pos)',
+          [task.id, items.map((i) => i.text), items.map((i) => i.required)],
+        );
+        if (status === 'in_review' || status === 'done') await checkRequiredSteps(tx, task.id);
       }
       return task.id;
     });
@@ -251,10 +266,7 @@ export default function taskRoutes({ db, access }) {
     await checkReviewer(reviewerId);
     const type = b.type ? oneOf(b.type, keys(TASK_TYPES), 'type') : 'general';
     const priority = b.priority ? oneOf(b.priority, keys(PRIORITIES), 'priority') : 'medium';
-    const steps = (Array.isArray(b.checklist) ? b.checklist : await stepsFor(db, type, req.user.language))
-      .map((x) => String(x).trim().slice(0, 500))
-      .filter(Boolean)
-      .slice(0, 200);
+    const steps = checklistItems(Array.isArray(b.checklist) ? b.checklist : await stepsFor(db, type, req.user.language));
 
     const ids = await db.tx(async (tx) => {
       const rows = await tx.all(
@@ -270,8 +282,8 @@ export default function taskRoutes({ db, access }) {
       );
       if (steps.length) {
         await tx.run(
-          'INSERT INTO checklist_items (task_id, text, position) SELECT t.id, s.text, s.pos - 1 FROM unnest(?::int[]) AS t(id) CROSS JOIN unnest(?::text[]) WITH ORDINALITY AS s(text, pos)',
-          [taskIds, steps],
+          'INSERT INTO checklist_items (task_id, text, required, position) SELECT t.id, s.text, s.required::int, s.pos - 1 FROM unnest(?::int[]) AS t(id) CROSS JOIN unnest(?::text[], ?::boolean[]) WITH ORDINALITY AS s(text, required, pos)',
+          [taskIds, steps.map((s) => s.text), steps.map((s) => s.required)],
         );
       }
       const title = rows.length > 1 ? `${rows[0].title} (+${rows.length - 1})` : rows[0].title;
@@ -320,6 +332,7 @@ export default function taskRoutes({ db, access }) {
       if (f.status === 'done' && t.status !== 'done' && gatekeeper && !access.canReviewTask(req.user, { ...t, reviewer_id: gatekeeper })) {
         throw badRequest('This task has a reviewer — send it to review so they can approve it');
       }
+      if ((f.status === 'in_review' || f.status === 'done') && f.status !== t.status && t.status !== 'done') await checkRequiredSteps(db, t.id);
       if (f.status === 'done' && t.status !== 'done') f.completed_at = nowUtc();
       if (f.status !== 'done') f.completed_at = null;
     }
@@ -445,6 +458,20 @@ export default function taskRoutes({ db, access }) {
     res.status(201).json({ ...c, done: !!c.done });
   });
 
+  // Appends the task type's SOP steps (with their required marks) to the checklist.
+  r.post('/:id/checklist/sop', async (req, res) => {
+    const t = await loadEditable(req);
+    const steps = checklistItems(await stepsFor(db, t.type, req.user.language));
+    if (!steps.length) throw badRequest('This type has no SOP steps');
+    await db.run(
+      `INSERT INTO checklist_items (task_id, text, required, position)
+       SELECT ?, s.text, s.required::int, s.pos - 1 + (SELECT COALESCE(MAX(position), -1) + 1 FROM checklist_items WHERE task_id = ?)
+       FROM unnest(?::text[], ?::boolean[]) WITH ORDINALITY AS s(text, required, pos)`,
+      [t.id, t.id, steps.map((s) => s.text), steps.map((s) => s.required)],
+    );
+    res.status(201).json({ added: steps.length });
+  });
+
   r.patch('/:id/checklist/:itemId', async (req, res) => {
     const t = await loadEditable(req);
     const c = await item(t, req.params.itemId);
@@ -457,6 +484,10 @@ export default function taskRoutes({ db, access }) {
   r.delete('/:id/checklist/:itemId', async (req, res) => {
     const t = await loadEditable(req);
     const c = await item(t, req.params.itemId);
+    // Otherwise the assignee could skip a required step by deleting it.
+    if (c.required && t.assignee_id === req.user.id && t.reporter_id !== req.user.id && req.user.role !== 'ceo') {
+      throw forbidden('Only whoever created the task or a manager can remove a required SOP step');
+    }
     await db.run('DELETE FROM checklist_items WHERE id = ?', [c.id]);
     res.status(204).end();
   });

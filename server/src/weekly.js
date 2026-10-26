@@ -36,8 +36,9 @@ export async function ensureWeeklyDuties(db, week = weekStart()) {
       if (!task) continue; // another instance got there first
       created++;
       const items = WEEKLY_DUTIES[u.role].map((key) => translate(lang, key));
+      // Every weekly duty is required before the task can go to review.
       await tx.run(
-        'INSERT INTO checklist_items (task_id, text, position) SELECT ?, text, pos - 1 FROM unnest(?::text[]) WITH ORDINALITY AS i(text, pos)',
+        'INSERT INTO checklist_items (task_id, text, required, position) SELECT ?, text, 1, pos - 1 FROM unnest(?::text[]) WITH ORDINALITY AS i(text, pos)',
         [task.id, items],
       );
       await tx.run("INSERT INTO activity (task_id, user_id, action, detail) VALUES (?, NULL, 'created', ?)", [task.id, title]);
