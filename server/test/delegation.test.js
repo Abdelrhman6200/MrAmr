@@ -97,3 +97,34 @@ test('a manager hands an absent agent’s open tasks and calls to a colleague', 
   const note = (await to.call('GET', '/notifications')).body.items.find((n) => n.type === 'handover');
   assert.equal(note.params.tasks, before.tasks);
 });
+
+test('every role has an SOP, and each team’s managers can change their roles’ SOPs', async () => {
+  const { ROLE_SOPS } = await import('../../client/src/roleSops.js');
+  const { ROLES } = await import('../src/meta.js');
+  for (const role of Object.keys(ROLES)) {
+    for (const lang of ['en', 'ar']) {
+      const sop = ROLE_SOPS[role]?.[lang];
+      assert.ok(sop?.purpose && sop.daily.length && sop.weekly.length && sop.system.length && sop.escalate, `${role} ${lang}`);
+    }
+  }
+
+  const head = await signIn('cs.head@taskflow.local');
+  const agent = await signIn('support1@taskflow.local');
+  const ops = await signIn('ops@taskflow.local');
+  const body = { purpose: 'Answer every student', daily: 'Call-backs first\nThen new calls', weekly: ['Clear the list'], system: 'Log every call', escalate: 'Nourhan' };
+  assert.equal((await agent.call('PUT', '/sops/role/cs_member', body)).status, 403);
+  assert.equal((await head.call('PUT', '/sops/role/instructor', body)).status, 403, 'another team');
+  assert.equal((await head.call('PUT', '/sops/role/nobody', body)).status, 400);
+  // A team leader changes their agents' and their own SOP, not their head's.
+  const lead = await signIn('cs.lead@taskflow.local');
+  assert.equal((await lead.call('PUT', '/sops/role/cs_head', body)).status, 403);
+  assert.equal((await lead.call('PUT', '/sops/role/cs_team_lead', {})).status, 200);
+  const saved = await head.call('PUT', '/sops/role/cs_member', body);
+  assert.equal(saved.status, 200);
+  assert.deepEqual(saved.body['role:cs_member'].daily, ['Call-backs first', 'Then new calls']);
+  assert.equal(saved.body['role:cs_member'].version, 1);
+  assert.equal((await agent.call('GET', '/sops')).body['role:cs_member'].escalate, 'Nourhan');
+  // User admins can change any role's; an empty one restores the built-in SOP.
+  assert.equal((await ops.call('PUT', '/sops/role/cs_member', {})).status, 200);
+  assert.equal((await agent.call('GET', '/sops')).body['role:cs_member'], undefined);
+});

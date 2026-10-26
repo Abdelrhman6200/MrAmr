@@ -60,7 +60,12 @@ export default function Dashboard() {
       <div className="page-head">
         <div>
           <h1>{greeting}</h1>
-          <p className="muted">{user.title || roleLabel(user.role)}</p>
+          <p className="muted">
+            {user.title || roleLabel(user.role)} ·{' '}
+            <Link className="link" to={`/sops?tab=roles&role=${user.role}`}>
+              {t('roleSop.link')}
+            </Link>
+          </p>
         </div>
       </div>
 

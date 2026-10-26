@@ -5,14 +5,16 @@ import { useApp } from '../context.jsx';
 import Icon from '../components/Icon.jsx';
 import { Empty, Spinner, timeAgo, typesFor, useSops } from '../components/ui.jsx';
 import { canEditSop, sopFor } from '../sops.js';
+import { canEditRoleSop, roleSopFor } from '../roleSops.js';
 
 // How each kind of work is done. New tasks start with these steps as their
 // checklist; required steps must be ticked before review. Managers change the
 // ones for their own team's work. ?type=… opens on one SOP (links from tasks).
 export default function Sops() {
   const { meta, user, t, lang, typeLabel, version } = useApp();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const focus = params.get('type');
+  const tab = params.get('tab') === 'roles' ? 'roles' : 'types';
   const [custom, setCustom] = useSops();
   const [stats, setStats] = useState({});
   const [q, setQ] = useState('');
@@ -21,8 +23,9 @@ export default function Sops() {
     api.get('/sops/stats').then(setStats).catch(() => {});
   }, [version]);
   useEffect(() => {
-    if (custom && focus) document.getElementById(`sop-${focus}`)?.scrollIntoView({ block: 'center' });
-  }, [custom, focus]);
+    const id = tab === 'roles' ? `role-${params.get('role')}` : `sop-${focus}`;
+    if (custom) document.getElementById(id)?.scrollIntoView({ block: 'center' });
+  }, [custom, focus, tab]);
 
   if (!custom) return <Spinner />;
 
@@ -52,6 +55,18 @@ export default function Sops() {
           </button>
         </div>
       </div>
+      <div className="seg sop-tabs no-print">
+        <button className={tab === 'types' ? 'active' : ''} onClick={() => setParams({})}>
+          {t('sop.tabTypes')}
+        </button>
+        <button className={tab === 'roles' ? 'active' : ''} onClick={() => setParams({ tab: 'roles', role: user.role })}>
+          {t('sop.tabRoles')}
+        </button>
+      </div>
+      {tab === 'roles' ? (
+        <RoleSops custom={custom} onSaved={setCustom} focus={params.get('role')} q={needle} />
+      ) : (
+        <>
       {groups.size === 0 && <Empty icon="search">{t('sop.noMatch')}</Empty>}
       {[...groups].map(([group, types]) => (
         <section key={group} className="sop-group">
@@ -72,7 +87,131 @@ export default function Sops() {
           </div>
         </section>
       ))}
+        </>
+      )}
     </div>
+  );
+}
+
+// One card per role, by department; the user's own role is marked.
+function RoleSops({ custom, onSaved, focus, q }) {
+  const { meta, user, lang, t, roleLabel, deptLabel } = useApp();
+  const matches = (role) => {
+    if (!q) return true;
+    const sop = roleSopFor(role, lang, custom);
+    return [roleLabel(role), sop.purpose, sop.escalate, ...sop.daily, ...sop.weekly, ...sop.system].some((x) => (x || '').toLowerCase().includes(q));
+  };
+  const depts = Object.keys(meta.departments)
+    .map((d) => [d, Object.keys(meta.roles).filter((r) => meta.roles[r].department === d && matches(r))])
+    .filter(([, roles]) => roles.length);
+  if (!depts.length) return <Empty icon="search">{t('sop.noMatch')}</Empty>;
+  return depts.map(([dept, roles]) => (
+    <section key={dept} className="sop-group">
+      <h2>{deptLabel(dept)}</h2>
+      <div className="sop-grid">
+        {roles.map((role) => (
+          <RoleCard
+            key={role}
+            role={role}
+            custom={custom}
+            onSaved={onSaved}
+            mine={role === user.role}
+            focused={role === focus}
+            canEdit={canEditRoleSop(meta.roles, meta.userAdminRoles, user.role, role)}
+          />
+        ))}
+      </div>
+    </section>
+  ));
+}
+
+function RoleCard({ role, custom, onSaved, mine, focused, canEdit }) {
+  const { t, lang, notify, roleLabel } = useApp();
+  const sop = roleSopFor(role, lang, custom);
+  const edited = custom[`role:${role}`];
+  const [draft, setDraft] = useState(null);
+  const save = async (body) => {
+    try {
+      onSaved(await api.put(`/sops/role/${role}`, body));
+      setDraft(null);
+      notify(t('sop.saved'), 'success');
+    } catch (err) {
+      notify(err.message, 'error');
+    }
+  };
+  const list = (key) =>
+    sop[key].length > 0 && (
+      <div className="role-section">
+        <h4>{t(`roleSop.${key}`)}</h4>
+        <ul>
+          {sop[key].map((x, i) => (
+            <li key={i}>{x}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  const field = (key, rows) => (
+    <label>
+      {t(`roleSop.${key}`)}
+      {rows ? (
+        <textarea rows={rows} value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} />
+      ) : (
+        <input value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} />
+      )}
+    </label>
+  );
+
+  return (
+    <article id={`role-${role}`} className={`panel sop-card role-card ${focused ? 'focused' : ''}`}>
+      <div className="sop-head">
+        <h3>
+          {roleLabel(role)}
+          {mine && <span className="mine-badge">{t('roleSop.yours')}</span>}
+          {edited && <span className="sop-version">v{edited.version}</span>}
+        </h3>
+        {canEdit && draft == null && (
+          <button className="btn sm no-print" onClick={() => setDraft({ ...sop, daily: sop.daily.join('\n'), weekly: sop.weekly.join('\n'), system: sop.system.join('\n') })}>
+            {t('common.edit')}
+          </button>
+        )}
+      </div>
+      {draft == null ? (
+        <>
+          {sop.purpose && <p className="sop-when">{sop.purpose}</p>}
+          {list('daily')}
+          {list('weekly')}
+          {list('system')}
+          {sop.escalate && (
+            <div className="sop-done">
+              <Icon name="alert" size={14} /> <b>{t('roleSop.escalate')}:</b> {sop.escalate}
+            </div>
+          )}
+          {edited && <div className="muted sm">{t('sop.editedBy', { name: edited.updated_by_name || '—', when: timeAgo(edited.updated_at) })}</div>}
+        </>
+      ) : (
+        <div className="sop-editor form">
+          {field('purpose')}
+          {field('daily', 4)}
+          {field('weekly', 4)}
+          {field('system', 3)}
+          {field('escalate')}
+          <p className="hint">{t('sop.oneStepPerLine')}</p>
+          <div className="row gap wrap">
+            <button className="btn primary sm" onClick={() => save(draft)}>
+              {t('common.save')}
+            </button>
+            <button className="btn sm" onClick={() => setDraft(null)}>
+              {t('common.cancel')}
+            </button>
+            {edited && (
+              <button className="btn sm" onClick={() => save({})}>
+                <Icon name="undo" size={14} /> {t('sop.restore')}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </article>
   );
 }
 

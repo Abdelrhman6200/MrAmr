@@ -2981,3 +2981,29 @@ html[lang='ar'] .auth-pitch h1 {
   gap: 8px;
   align-content: end;
 }
+
+/* SOPs → Roles */
+.sop-tabs {
+  margin-bottom: 18px;
+}
+.role-section h4 {
+  margin: 4px 0 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.role-section ul {
+  margin: 0;
+  padding-inline-start: 18px;
+  display: grid;
+  gap: 4px;
+  line-height: 1.45;
+  font-size: 13.5px;
+}
+.mine-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
