@@ -275,7 +275,7 @@ export default function TaskDetail({ id }) {
           </Field>
           <Field label={t('form.type')}>
             <select value={task.type} disabled={ro} onChange={(e) => update({ type: e.target.value })}>
-              <TypeOptions />
+              <TypeOptions current={task.type} />
             </select>
           </Field>
           <Field label={t('form.track')}>

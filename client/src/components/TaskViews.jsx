@@ -213,7 +213,7 @@ export function TaskFilters({ filters, setFilters, projects, people, showScope =
       </select>
       <select value={filters.type || ''} onChange={set('type')}>
         <option value="">{t('filter.anyType')}</option>
-        <TypeOptions />
+        <TypeOptions all />
       </select>
       <select value={filters.track || ''} onChange={set('track')}>
         <TrackOptions none={t('filter.anyTrack')} />

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
-import { Modal, TrackOptions, TypeOptions, UserSelect, useTaskDialog } from './ui.jsx';
+import { Modal, TrackOptions, TypeOptions, UserSelect, typesFor, useTaskDialog } from './ui.jsx';
 
 export default function TaskForm() {
   const { meta, user, refresh, notify, users, t, priorityLabel, statusLabel } = useApp();
@@ -14,7 +14,8 @@ export default function TaskForm() {
     title: '',
     description: '',
     project_id: params.get('new_project_id') ? Number(params.get('new_project_id')) : null,
-    type: params.get('new_type') || 'general',
+    // The academic team starts on its first work type.
+    type: params.get('new_type') || (meta.roles[user.role]?.department === 'academic' ? typesFor(meta, user).find((x) => x.group === 'academic').key : 'general'),
     status: params.get('new_status') || 'todo',
     priority: 'medium',
     assignee_id: params.get('new_assignee_id') ? Number(params.get('new_assignee_id')) : user.id,
@@ -96,7 +97,7 @@ export default function TaskForm() {
           <label>
             {t('form.type')}
             <select value={form.type} onChange={set('type')}>
-              <TypeOptions />
+              <TypeOptions current={form.type} />
             </select>
           </label>
           <label>

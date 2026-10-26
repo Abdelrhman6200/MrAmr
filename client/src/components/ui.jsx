@@ -41,11 +41,24 @@ export function TrackTag({ track }) {
   return track ? <span className="tag track">{trackLabel(track)}</span> : null;
 }
 
-// <option>s for a task type <select>, grouped by department.
-export function TypeOptions() {
-  const { meta, t, typeLabel } = useApp();
+// The task types someone picks from when creating or editing work: the Academic
+// Material team gets its own work (and General); other teams don't see it.
+// Leadership sees everything.
+export function typesFor(meta, user) {
+  const dept = meta.roles[user.role]?.department;
+  if (dept === 'executive' || dept === 'operations') return meta.taskTypes;
+  if (dept === 'academic') return meta.taskTypes.filter((x) => x.group === 'academic' || x.key === 'general');
+  return meta.taskTypes.filter((x) => x.group !== 'academic');
+}
+
+// <option>s for a task type <select>, grouped by department. `all` lists every
+// type (filters); otherwise the user's own, plus `current` if it is another.
+export function TypeOptions({ all = false, current }) {
+  const { meta, user, t, typeLabel } = useApp();
+  const list = all ? meta.taskTypes : typesFor(meta, user);
+  const shown = current && !list.some((x) => x.key === current) ? [...list, meta.taskTypes.find((x) => x.key === current)].filter(Boolean) : list;
   const groups = new Map();
-  for (const x of meta.taskTypes) {
+  for (const x of shown) {
     const group = x.group || 'general';
     groups.set(group, [...(groups.get(group) || []), x]);
   }
