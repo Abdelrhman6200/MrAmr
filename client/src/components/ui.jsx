@@ -1,9 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { api } from '../api.js';
 import { useSearchParams } from 'react-router-dom';
 import { useApp } from '../context.jsx';
 import { getActiveLocale } from '../i18n.js';
 import { parseServerTime } from '../time.js';
 import Icon from './Icon.jsx';
+import { typesFor as typesForDept } from '../sops.js';
 
 export const initials = (name = '') =>
   name
@@ -36,19 +38,49 @@ export function TypeTag({ type }) {
   return <span className="tag">{typeLabel(type)}</span>;
 }
 
+// A task's tracks (comma-separated), one tag each.
 export function TrackTag({ track }) {
   const { trackLabel } = useApp();
-  return track ? <span className="tag track">{trackLabel(track)}</span> : null;
+  return (track || '')
+    .split(',')
+    .filter(Boolean)
+    .map((k) => (
+      <span key={k} className="tag track">
+        {trackLabel(k)}
+      </span>
+    ));
 }
 
-// The task types someone picks from when creating or editing work: the Academic
-// Material team gets its own work (and General); other teams don't see it.
-// Leadership sees everything.
-export function typesFor(meta, user) {
-  const dept = meta.roles[user.role]?.department;
-  if (dept === 'executive' || dept === 'operations') return meta.taskTypes;
-  if (dept === 'academic') return meta.taskTypes.filter((x) => x.group === 'academic' || x.key === 'general');
-  return meta.taskTypes.filter((x) => x.group !== 'academic');
+// Tracks as tags to switch on and off; `value` and onChange use the comma-separated form.
+export function TrackPicker({ value, onChange, disabled }) {
+  const { meta, trackLabel } = useApp();
+  const on = new Set((value || '').split(',').filter(Boolean));
+  const toggle = (k) => {
+    on.has(k) ? on.delete(k) : on.add(k);
+    onChange(meta.tracks.map((x) => x.key).filter((x) => on.has(x)).join(','));
+  };
+  return (
+    <div className="track-picker">
+      {meta.tracks.map((x) => (
+        <button key={x.key} type="button" className={`tag track-toggle${on.has(x.key) ? ' on' : ''}`} aria-pressed={on.has(x.key)} disabled={disabled} onClick={() => toggle(x.key)}>
+          {trackLabel(x.key)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// The task types someone picks from when creating or editing work (see sops.js).
+export const typesFor = (meta, user) => typesForDept(meta.taskTypes, meta.roles[user.role]?.department);
+
+// Managers' versions of the SOPs, keyed by type (reloaded when data changes).
+export function useSops() {
+  const { version } = useApp();
+  const [custom, setCustom] = useState(null);
+  useEffect(() => {
+    api.get('/sops').then(setCustom).catch(() => setCustom({}));
+  }, [version]);
+  return [custom, setCustom];
 }
 
 // <option>s for a task type <select>, grouped by department. `all` lists every

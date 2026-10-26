@@ -10,7 +10,7 @@
 const NOW = "to_char(timezone('UTC', now()), 'YYYY-MM-DD HH24:MI:SS')";
 
 // Bump when the schema below changes; startup re-applies it once.
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -75,6 +75,14 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS track TEXT NOT NULL DEFAULT '';
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS weekly_key TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_weekly ON tasks(assignee_id, weekly_key) WHERE weekly_key IS NOT NULL;
+
+-- A manager's version of a task type's standard steps (client/src/sops.js has the built-in ones).
+CREATE TABLE IF NOT EXISTS sops (
+  type TEXT PRIMARY KEY,
+  steps TEXT NOT NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TEXT NOT NULL DEFAULT ${NOW}
+);
 
 CREATE TABLE IF NOT EXISTS checklist_items (
   id SERIAL PRIMARY KEY,

@@ -16,6 +16,7 @@ const NAV = [
   { to: '/calls', key: 'nav.calls', icon: 'calls', calls: true },
   { to: '/team', key: 'nav.team', icon: 'team' },
   { to: '/reports', key: 'nav.reports', icon: 'reports' },
+  { to: '/sops', key: 'sop.title', icon: 'checklist' },
 ];
 
 export function Logo({ size = 28 }) {

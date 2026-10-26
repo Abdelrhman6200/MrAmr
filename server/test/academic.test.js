@@ -125,3 +125,45 @@ test('a site that loaded the sample before gets the academic team added once', a
   // Same password scheme as the rest of the sample (the demo one here).
   assert.equal((await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'assistant3@taskflow.local', password: DEMO_PASSWORD }) })).status, 200);
 });
+
+test('a task can have several tracks, and filters match any of them', async () => {
+  const head = await signIn('academic.head@taskflow.local');
+  const t = await head.call('POST', '/tasks', { title: 'Model answer for both', type: 'hw_model_answer', track: ['azhar', 'general'] });
+  assert.equal(t.body.track, 'general,azhar');
+  assert.equal((await head.call('PATCH', `/tasks/${t.body.id}`, { track: 'azhar,azhar' })).body.track, 'azhar');
+  await head.call('PATCH', `/tasks/${t.body.id}`, { track: 'general,azhar' });
+  for (const track of ['general', 'azhar']) {
+    assert.ok((await head.call('GET', `/tasks?track=${track}`)).body.some((x) => x.id === t.body.id));
+  }
+  assert.ok(!(await head.call('GET', '/tasks?track=baccalaureate')).body.some((x) => x.id === t.body.id));
+});
+
+test('new tasks start with their type’s SOP, which the responsible managers can change', async () => {
+  const head = await signIn('academic.head@taskflow.local');
+  const asst = await signIn('assistant1@taskflow.local');
+  const cs = await signIn('cs.head@taskflow.local');
+  const ceo = await signIn('ceo@taskflow.local');
+  const checklist = async (who, body) => {
+    const t = (await who.call('POST', '/tasks', body)).body;
+    return (await who.call('GET', `/tasks/${t.id}`)).body.checklist.map((c) => c.text);
+  };
+
+  assert.equal((await checklist(asst, { title: 'Proctor', type: 'exam_proctoring' }))[0], 'Arrive 30 minutes before the exam');
+  // An explicit checklist (even an empty one) wins.
+  assert.deepEqual(await checklist(asst, { title: 'Proctor 2', type: 'exam_proctoring', checklist: [] }), []);
+
+  assert.equal((await asst.call('PUT', '/sops/exam_proctoring', { steps: ['x'] })).status, 403);
+  assert.equal((await cs.call('PUT', '/sops/exam_proctoring', { steps: ['x'] })).status, 403, 'not their team’s work');
+  assert.equal((await cs.call('PUT', '/sops/support', { steps: ['Greet the student', ' ', 'Solve it'] })).status, 200);
+  const saved = await head.call('PUT', '/sops/exam_proctoring', { steps: ['Be there at 9:30', 'Count the papers'] });
+  assert.deepEqual(saved.body.exam_proctoring.steps, ['Be there at 9:30', 'Count the papers']);
+  assert.equal(saved.body.support.steps.length, 2);
+  assert.deepEqual(await checklist(asst, { title: 'Proctor 3', type: 'exam_proctoring' }), ['Be there at 9:30', 'Count the papers']);
+
+  // Back to the built-in steps, in the creator's language.
+  assert.equal((await ceo.call('PUT', '/sops/exam_proctoring', { steps: [] })).status, 200);
+  assert.equal((await asst.call('GET', '/sops')).body.exam_proctoring, undefined);
+  await asst.call('PATCH', `/users/${asst.user.id}`, { language: 'ar' });
+  assert.equal((await checklist(asst, { title: 'مراقبة', type: 'exam_proctoring' }))[0], 'احضر قبل الامتحان بنص ساعة');
+  await asst.call('PATCH', `/users/${asst.user.id}`, { language: 'en' });
+});

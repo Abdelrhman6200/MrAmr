@@ -3,6 +3,7 @@ import { badRequest, forbidden, idParam, notFound, oneOf, optionalDate, optional
 import { PRIORITIES, ROLES, STATUSES, TASK_TYPES, TRACKS, keys } from '../meta.js';
 import { localDate, nowUtc } from '../time.js';
 import { translate } from '../../../client/src/i18n.js';
+import { stepsFor } from './sops.js';
 
 export const TASK_SELECT = `
   SELECT t.*, p.name AS project_name, p.color AS project_color,
@@ -28,7 +29,12 @@ function normaliseTags(tags) {
   return [...new Set(list.map((t) => String(t).trim().toLowerCase()).filter(Boolean))].slice(0, 20).join(',');
 }
 
-const track = (value) => (value ? oneOf(value, keys(TRACKS), 'track') : '');
+// Tracks are tags: any of general / azhar / baccalaureate, stored comma-separated in a fixed order.
+function tracks(value) {
+  const list = Array.isArray(value) ? value : String(value || '').split(',');
+  const picked = new Set(list.map((t) => String(t).trim()).filter(Boolean).map((t) => oneOf(t, keys(TRACKS), 'track')));
+  return keys(TRACKS).filter((k) => picked.has(k)).join(',');
+}
 
 function estimate(value) {
   if (value === '' || value === null) return null;
@@ -141,7 +147,7 @@ export default function taskRoutes({ db, access }) {
     if (q.open === '1') add("t.status != 'done'");
     if (q.priority) add('t.priority = ?', String(q.priority));
     if (q.type) add('t.type = ?', String(q.type));
-    if (q.track) add('t.track = ?', String(q.track));
+    if (q.track) add("(',' || t.track || ',') LIKE ?", `%,${likeEscape(String(q.track))},%`);
     if (q.project_id === 'none') add('t.project_id IS NULL');
     else if (q.project_id) add('t.project_id = ?', idParam(q.project_id));
     if (q.assignee_id === 'none') add('t.assignee_id IS NULL');
@@ -203,9 +209,12 @@ export default function taskRoutes({ db, access }) {
       optionalDate(b.due_date, 'due_date') ?? null,
       b.estimate_hours === undefined ? null : estimate(b.estimate_hours),
       normaliseTags(b.tags) ?? '',
-      track(b.track),
+      tracks(b.track),
       status === 'done' ? nowUtc() : null,
     ];
+
+    // Without a checklist of its own, a task starts with its type's SOP.
+    const checklist = Array.isArray(b.checklist) ? b.checklist : await stepsFor(db, values[3], req.user.language);
 
     const id = await db.tx(async (tx) => {
       const task = await tx.get(
@@ -218,11 +227,9 @@ export default function taskRoutes({ db, access }) {
       if (status === 'in_review') {
         await notify(tx, req.user, reviewerId, 'review_requested', `${req.user.name} requested your review on "${title}"`, task.id, title);
       }
-      if (Array.isArray(b.checklist)) {
-        const items = b.checklist.map((s) => String(s).trim().slice(0, 500)).filter(Boolean).slice(0, 200);
-        for (const [i, text] of items.entries()) {
-          await tx.run('INSERT INTO checklist_items (task_id, text, position) VALUES (?, ?, ?)', [task.id, text, i]);
-        }
+      const items = checklist.map((s) => String(s).trim().slice(0, 500)).filter(Boolean).slice(0, 200);
+      if (items.length) {
+        await tx.run('INSERT INTO checklist_items (task_id, text, position) SELECT ?, text, pos - 1 FROM unnest(?::text[]) WITH ORDINALITY AS i(text, pos)', [task.id, items]);
       }
       return task.id;
     });
@@ -242,7 +249,7 @@ export default function taskRoutes({ db, access }) {
     if (b.due_date !== undefined) f.due_date = optionalDate(b.due_date, 'due_date');
     if (b.estimate_hours !== undefined) f.estimate_hours = estimate(b.estimate_hours);
     if (b.tags !== undefined) f.tags = normaliseTags(b.tags);
-    if (b.track !== undefined) f.track = track(b.track);
+    if (b.track !== undefined) f.track = tracks(b.track);
     if (b.project_id !== undefined) {
       f.project_id = optionalId(b.project_id, 'project_id');
       await checkProject(req.user, f.project_id);

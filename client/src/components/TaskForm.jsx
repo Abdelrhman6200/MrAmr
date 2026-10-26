@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
-import { Modal, TrackOptions, TypeOptions, UserSelect, typesFor, useTaskDialog } from './ui.jsx';
+import { Modal, TrackPicker, TypeOptions, UserSelect, typesFor, useSops, useTaskDialog } from './ui.jsx';
+import { sopSteps } from '../sops.js';
 
 export default function TaskForm() {
-  const { meta, user, refresh, notify, users, t, priorityLabel, statusLabel } = useApp();
+  const { meta, user, refresh, notify, users, t, lang, priorityLabel, statusLabel } = useApp();
+  const [sops] = useSops();
+  // The checklist follows the type's SOP until someone edits it by hand.
+  const [ownChecklist, setOwnChecklist] = useState(false);
   const { params, close, open } = useTaskDialog();
   const [projects, setProjects] = useState([]);
   const [assignable, setAssignable] = useState([]);
@@ -32,6 +36,9 @@ export default function TaskForm() {
     api.get('/projects').then(setProjects).catch(() => {});
   }, []);
   useEffect(() => {
+    if (sops && !ownChecklist) setForm((f) => ({ ...f, checklist: sopSteps(f.type, lang, sops).join('\n') }));
+  }, [form.type, sops, lang, ownChecklist]);
+  useEffect(() => {
     api.get('/users/assignable', { project_id: form.project_id }).then(setAssignable).catch(() => {});
   }, [form.project_id]);
 
@@ -42,7 +49,8 @@ export default function TaskForm() {
     try {
       const created = await api.post('/tasks', {
         ...form,
-        checklist: form.checklist.split('\n').map((s) => s.trim()).filter(Boolean),
+        // Still loading the SOPs: let the server add them.
+        checklist: ownChecklist || sops ? form.checklist.split('\n').map((s) => s.trim()).filter(Boolean) : undefined,
       });
       refresh();
       notify(t('form.created'), 'success');
@@ -102,9 +110,7 @@ export default function TaskForm() {
           </label>
           <label>
             {t('form.track')}
-            <select value={form.track} onChange={set('track')}>
-              <TrackOptions none={t('form.noTrack')} />
-            </select>
+            <TrackPicker value={form.track} onChange={set('track')} />
           </label>
           <label>
             {t('form.priority')}
@@ -148,8 +154,16 @@ export default function TaskForm() {
           </label>
         </div>
         <label>
-          {t('form.checklist')} <span className="hint">{t('form.checklistHint')}</span>
-          <textarea rows={3} value={form.checklist} onChange={set('checklist')} placeholder={t('form.checklistPh')} />
+          {t('form.checklist')} <span className="hint">{ownChecklist ? t('form.checklistHint') : t('form.checklistSop')}</span>
+          <textarea
+            rows={Math.min(Math.max(form.checklist.split('\n').length, 3), 8)}
+            value={form.checklist}
+            onChange={(e) => {
+              setOwnChecklist(true);
+              set('checklist')(e);
+            }}
+            placeholder={t('form.checklistPh')}
+          />
         </label>
       </form>
     </Modal>

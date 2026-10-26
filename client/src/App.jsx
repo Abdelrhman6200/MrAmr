@@ -14,6 +14,7 @@ import Team from './pages/Team.jsx';
 import Reports from './pages/Reports.jsx';
 import Users from './pages/Users.jsx';
 import Settings from './pages/Settings.jsx';
+import Sops from './pages/Sops.jsx';
 import Calls from './pages/Calls.jsx';
 import Centers from './pages/Centers.jsx';
 import { Spinner } from './components/ui.jsx';
@@ -45,6 +46,7 @@ function Routed() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/users" element={<Users />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/sops" element={<Sops />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

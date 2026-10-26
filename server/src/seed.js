@@ -352,8 +352,8 @@ async function academicSample(prepare, ids, hash) {
     desc: '64 papers from the Saturday group. Record the marks in the sheet before Monday.',
     checklist: [['Group A (32 papers)', true], ['Group B (32 papers)', false], ['Enter the marks', false]],
   });
-  await task(chem, 'Proctor the monthly exam — Maadi Center', 'exam_proctoring', 'todo', 'high', 'asst2', 'acad', 2, { track: 'general', desc: 'Friday 10:00–12:00, hall 2. Be there 30 minutes early.' });
-  await task(chem, 'Grade the monthly exam papers — Maadi Center', 'exam_grading', 'todo', 'high', 'asst2', 'acad', 4, { track: 'general', reviewer: 'acad' });
+  await task(chem, 'Proctor the monthly exam — Maadi Center', 'exam_proctoring', 'todo', 'high', 'asst2', 'acad', 2, { track: 'general,azhar', desc: 'Friday 10:00–12:00, hall 2. Be there 30 minutes early.' });
+  await task(chem, 'Grade the monthly exam papers — Maadi Center', 'exam_grading', 'todo', 'high', 'asst2', 'acad', 4, { track: 'general,azhar', reviewer: 'acad' });
   await task(chem, 'Take student questions — Heliopolis Saturday class', 'center_questions', 'todo', 'medium', 'asst3', 'acad', 1, { track: 'azhar' });
   await task(chem, 'Grade Lesson 3 homework — Azhar group', 'hw_grading', 'done', 'medium', 'asst3', 'acad', -3, { track: 'azhar', doneAgo: 3 });
 

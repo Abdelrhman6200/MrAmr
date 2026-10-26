@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
-import { Avatar, Modal, PriorityTag, StatusPill, TrackOptions, TrackTag, TypeOptions, TypeTag, UserSelect, isOverdue, timeAgo, useTaskDialog } from './ui.jsx';
+import { Avatar, Modal, PriorityTag, StatusPill, TrackPicker, TrackTag, TypeOptions, TypeTag, UserSelect, isOverdue, timeAgo, useSops, useTaskDialog } from './ui.jsx';
+import { sopSteps } from '../sops.js';
 import Icon from './Icon.jsx';
 
 function ReviewBox({ task, onDone }) {
@@ -39,7 +40,8 @@ function ReviewBox({ task, onDone }) {
 }
 
 export default function TaskDetail({ id }) {
-  const { meta, refresh, version, notify, users, user, t, statusLabel, priorityLabel } = useApp();
+  const { meta, refresh, version, notify, users, user, t, lang, statusLabel, priorityLabel } = useApp();
+  const [sops] = useSops();
   const { close } = useTaskDialog();
   const [task, setTask] = useState(null);
   const [error, setError] = useState('');
@@ -99,6 +101,12 @@ export default function TaskDetail({ id }) {
     if (!newItem.trim()) return;
     await api.post(`/tasks/${task.id}/checklist`, { text: newItem });
     setNewItem('');
+    refresh();
+  };
+
+  // A task with an empty checklist can take its type's SOP steps in one go.
+  const addSop = async () => {
+    for (const text of sopSteps(task.type, lang, sops)) await api.post(`/tasks/${task.id}/checklist`, { text });
     refresh();
   };
 
@@ -191,6 +199,11 @@ export default function TaskDetail({ id }) {
                 </li>
               ))}
             </ul>
+            {!ro && task.checklist.length === 0 && sops && sopSteps(task.type, lang, sops).length > 0 && (
+              <button className="btn sm sop-add" onClick={addSop}>
+                <Icon name="checklist" size={14} /> {t('sop.addSteps')}
+              </button>
+            )}
             {!ro && (
               <form onSubmit={addItem} className="row gap">
                 <input value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder={t('task.addItem')} />
@@ -279,9 +292,7 @@ export default function TaskDetail({ id }) {
             </select>
           </Field>
           <Field label={t('form.track')}>
-            <select value={task.track || ''} disabled={ro} onChange={(e) => update({ track: e.target.value })}>
-              <TrackOptions none={t('form.noTrack')} />
-            </select>
+            <TrackPicker value={task.track} disabled={ro} onChange={(v) => update({ track: v })} />
           </Field>
           <Field label={t('form.project')}>
             <select value={task.project_id ?? ''} disabled={ro} onChange={(e) => update({ project_id: e.target.value ? Number(e.target.value) : null })}>
