@@ -4,7 +4,7 @@ import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { Board, TaskFilters, TaskTable } from '../components/TaskViews.jsx';
 
-const FILTER_KEYS = ['q', 'scope', 'status', 'priority', 'type', 'project_id', 'assignee_id', 'due'];
+const FILTER_KEYS = ['q', 'scope', 'status', 'priority', 'type', 'track', 'project_id', 'assignee_id', 'due'];
 
 function readView() {
   try {

@@ -28,6 +28,7 @@ export const ROLES = {
   cs_head: { label: 'Head of Customer Service', department: 'customer_service', level: 'manager' },
   cs_member: { label: 'Customer Service Agent', department: 'customer_service', level: 'member' },
   product_owner: { label: 'Product Owner', department: 'product', level: 'manager' },
+  platform_member: { label: 'Platform Team Member', department: 'product', level: 'member' },
 };
 
 // Roles allowed to create/edit user accounts.
@@ -61,8 +62,14 @@ export const TASK_TYPES = [
   { key: 'qc_check', label: 'QC Check' },
   { key: 'campaign', label: 'Marketing Campaign' },
   { key: 'support', label: 'Customer Support' },
-  { key: 'bug', label: 'Platform Bug' },
-  { key: 'feature', label: 'Feature Request' },
+  // The online platform (Product): content uploads, exams, forums, complaints.
+  { key: 'content_upload', label: 'Content upload', group: 'platform' },
+  { key: 'platform_exam', label: 'Exam on the platform', group: 'platform' },
+  { key: 'exam_results', label: 'Exam results', group: 'platform' },
+  { key: 'forum_moderation', label: 'Forum moderation', group: 'platform' },
+  { key: 'complaint', label: 'Student complaint', group: 'platform' },
+  { key: 'bug', label: 'Platform Bug', group: 'platform' },
+  { key: 'feature', label: 'Feature Request', group: 'platform' },
   { key: 'operations', label: 'Operations' },
   // Academic Material: the assistants' work, at the centers and on the platform.
   { key: 'hw_grading', label: 'Homework grading at a center', group: 'academic' },

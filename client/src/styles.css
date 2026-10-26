@@ -2721,3 +2721,70 @@ html[lang='ar'] .auth-pitch h1 {
 .sop-add {
   margin-bottom: 8px;
 }
+
+/* Online platform page */
+.platform-tabs {
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.platform-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.panel.flush {
+  padding: 0;
+  overflow: hidden;
+}
+.row.end {
+  justify-content: flex-end;
+}
+.schedule {
+  display: grid;
+  gap: 14px;
+}
+.schedule-week h2 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.schedule-week.current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+.schedule-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.schedule-list li {
+  display: grid;
+  grid-template-columns: 90px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 6px;
+  border-top: 1px solid var(--border);
+  border-radius: 6px;
+}
+.schedule-list li:hover {
+  background: var(--surface-2);
+}
+.schedule-list li.late .schedule-date {
+  color: var(--danger, #dc2626);
+  font-weight: 600;
+}
+.schedule-date {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.schedule-title {
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .schedule-list li {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

@@ -146,7 +146,7 @@ export default function taskRoutes({ db, access }) {
     if (q.status) add('t.status = ANY(?::text[])', String(q.status).split(','));
     if (q.open === '1') add("t.status != 'done'");
     if (q.priority) add('t.priority = ?', String(q.priority));
-    if (q.type) add('t.type = ?', String(q.type));
+    if (q.type) add('t.type = ANY(?::text[])', String(q.type).split(','));
     if (q.track) add("(',' || t.track || ',') LIKE ?", `%,${likeEscape(String(q.track))},%`);
     if (q.project_id === 'none') add('t.project_id IS NULL');
     else if (q.project_id) add('t.project_id = ?', idParam(q.project_id));
@@ -234,6 +234,51 @@ export default function taskRoutes({ db, access }) {
       return task.id;
     });
     await respond(req, res, id, 201);
+  });
+
+  // ---- create many (a content plan) ---------------------------------------
+  // The same settings for every item; each item has its own title and due date.
+  r.post('/batch', async (req, res) => {
+    const b = req.body || {};
+    if (!Array.isArray(b.items) || !b.items.length) throw badRequest('Add at least one item');
+    if (b.items.length > 100) throw badRequest('Add at most 100 items at a time');
+    const items = b.items.map((it) => ({ title: requiredString(it?.title, 'title', 300), due: optionalDate(it?.due_date, 'due_date') ?? null }));
+    const projectId = optionalId(b.project_id, 'project_id') ?? null;
+    await checkProject(req.user, projectId);
+    const assigneeId = b.assignee_id === undefined ? req.user.id : optionalId(b.assignee_id, 'assignee_id') ?? null;
+    await checkAssignee(req.user, assigneeId, projectId);
+    const reviewerId = optionalId(b.reviewer_id, 'reviewer_id') ?? null;
+    await checkReviewer(reviewerId);
+    const type = b.type ? oneOf(b.type, keys(TASK_TYPES), 'type') : 'general';
+    const priority = b.priority ? oneOf(b.priority, keys(PRIORITIES), 'priority') : 'medium';
+    const steps = (Array.isArray(b.checklist) ? b.checklist : await stepsFor(db, type, req.user.language))
+      .map((x) => String(x).trim().slice(0, 500))
+      .filter(Boolean)
+      .slice(0, 200);
+
+    const ids = await db.tx(async (tx) => {
+      const rows = await tx.all(
+        `INSERT INTO tasks (project_id, title, description, type, priority, assignee_id, reporter_id, reviewer_id, due_date, tags, track)
+         SELECT ?, i.title, ?, ?, ?, ?, ?, ?, i.due, ?, ? FROM unnest(?::text[], ?::text[]) WITH ORDINALITY AS i(title, due, n)
+         ORDER BY i.n RETURNING id, title`,
+        [projectId, String(b.description || ''), type, priority, assigneeId, req.user.id, reviewerId, normaliseTags(b.tags) ?? '', tracks(b.track), items.map((i) => i.title), items.map((i) => i.due)],
+      );
+      const taskIds = rows.map((r) => r.id);
+      await tx.run(
+        "INSERT INTO activity (task_id, project_id, user_id, action, detail) SELECT a.id, ?, ?, 'created', a.title FROM unnest(?::int[], ?::text[]) AS a(id, title)",
+        [projectId, req.user.id, taskIds, rows.map((r) => r.title)],
+      );
+      if (steps.length) {
+        await tx.run(
+          'INSERT INTO checklist_items (task_id, text, position) SELECT t.id, s.text, s.pos - 1 FROM unnest(?::int[]) AS t(id) CROSS JOIN unnest(?::text[]) WITH ORDINALITY AS s(text, pos)',
+          [taskIds, steps],
+        );
+      }
+      const title = rows.length > 1 ? `${rows[0].title} (+${rows.length - 1})` : rows[0].title;
+      await notify(tx, req.user, assigneeId, 'assigned', `${req.user.name} assigned you "${title}"`, rows[0].id, title);
+      return taskIds;
+    });
+    res.status(201).json({ ids });
   });
 
   // ---- update -----------------------------------------------------------

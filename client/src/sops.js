@@ -41,6 +41,28 @@ export const SOPS = {
     ar: ['اتفق على النتيجة المطلوبة والمعاد', 'حدد المطلوب ومين هيعمله', 'نفّذ', 'بلّغ الناس المعنيين', 'سجّله في مكان الفريق يلاقيه'],
   },
 
+  // Online platform
+  content_upload: {
+    en: ['Get the final files from the content team (video, PDF, quiz)', 'Check the video plays, sound and captions', 'Upload to the right course, unit and lesson', 'Set the title, description and order', 'Set the publish date and who can see it', 'Open it as a student and check it works', 'Tell Customer Service and the teacher it is live'],
+    ar: ['استلم الملفات النهائية من فريق المحتوى (فيديو، PDF، أسئلة)', 'اتأكد إن الفيديو شغال والصوت والترجمة سليمين', 'ارفع على الكورس والوحدة والدرس الصح', 'اكتب العنوان والوصف وحدد الترتيب', 'حدد معاد النشر ومين يقدر يشوفه', 'افتحه بحساب طالب واتأكد إنه شغال', 'بلّغ خدمة العملاء والمستر إنه اتنشر'],
+  },
+  platform_exam: {
+    en: ['Get the approved exam and answer key', 'Enter the questions and the correct answers', 'Set the time limit, attempts and opening window', 'Choose the students or groups it is for', 'Take it once as a test student', 'Publish it and announce it', 'Watch for problems while it is open'],
+    ar: ['استلم الامتحان المعتمد ونموذج الإجابة', 'ادخل الأسئلة والإجابات الصح', 'حدد الوقت وعدد المحاولات ومعاد الفتح والقفل', 'اختار الطلبة أو المجموعات', 'جرّبه مرة بحساب طالب تجريبي', 'انشره واعلن عنه', 'تابع أي مشاكل وهو مفتوح'],
+  },
+  exam_results: {
+    en: ['Close the exam at the deadline', 'Check the automatic marks', 'Send the essay questions for grading', 'Publish the results to the students', 'Share the report (averages, top students, hardest questions) with the teacher'],
+    ar: ['اقفل الامتحان في معاده', 'راجع التصحيح الأوتوماتيك', 'ابعت الأسئلة المقالية للتصحيح', 'انشر النتايج للطلبة', 'ابعت التقرير (المتوسط، الأوائل، أصعب الأسئلة) للمستر'],
+  },
+  forum_moderation: {
+    en: ['Read the new posts and replies', 'Remove anything breaking the forum rules', 'Answer general questions about the platform', 'Pass subject questions to the academic team', 'Pin useful answers', 'Note recurring problems for the product owner'],
+    ar: ['اقرأ البوستات والردود الجديدة', 'امسح أي حاجة مخالفة لقواعد المنتدى', 'رد على الأسئلة العامة عن المنصة', 'حوّل الأسئلة العلمية لفريق المادة العلمية', 'ثبّت الإجابات المفيدة', 'سجّل المشاكل المتكررة لمالك المنتج'],
+  },
+  complaint: {
+    en: ['Record who complained, how to reach them and what happened', 'Reply within 24 hours that it is being handled', 'Find the cause (bug, content, payment, staff)', 'Fix it or pass it to the team responsible', 'Tell the student what was done', 'Confirm the student is satisfied and close it'],
+    ar: ['سجّل مين اشتكى ورقم تواصله وإيه اللي حصل', 'رد خلال 24 ساعة إن الشكوى بتتحل', 'حدد السبب (خلل، محتوى، دفع، موظف)', 'حلّها أو حوّلها للفريق المسؤول', 'بلّغ الطالب باللي اتعمل', 'اتأكد إن الطالب راضي وقفّل الشكوى'],
+  },
+
   // Academic Material
   hw_grading: {
     en: ['Collect the homework papers from the center', 'Grade using the homework model answer', 'Write a note on common mistakes', 'Enter the marks in the sheet', 'Return the papers to the center', 'Send the common mistakes to the teacher'],

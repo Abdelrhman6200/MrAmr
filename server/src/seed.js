@@ -5,6 +5,7 @@ import { hashPassword, verifyPassword } from './auth.js';
 import { bump, databaseUrl, openDb, readCounter } from './db.js';
 import { localDate, nowUtc, utcAgo, DAY } from './time.js';
 import { weekStart } from './weekly.js';
+import { SOPS } from '../../client/src/sops.js';
 
 export const DEMO_PASSWORD = 'password123';
 
@@ -59,7 +60,7 @@ async function bulkWriter(tx) {
   const reserved = {};
   for (const r of await tx.all(
     `SELECT t.tbl, nextval(pg_get_serial_sequence(t.tbl, 'id'))::int AS id
-     FROM unnest(?::text[]) AS t(tbl), generate_series(1, 120)`,
+     FROM unnest(?::text[]) AS t(tbl), generate_series(1, 300)`,
     [ID_TABLES],
   )) {
     (reserved[r.tbl] ??= []).push(r.id);
@@ -248,6 +249,7 @@ export async function seed(db, { ceo = null } = {}) {
     });
 
     await academicSample(prepare, ids, hash);
+    await platformSample(prepare, ids, hash);
 
     // Customer Service call list
     const callList = (
@@ -322,7 +324,8 @@ export async function seed(db, { ceo = null } = {}) {
     await flush();
     // Sample notifications are history, not news: never email them.
     await tx.run('UPDATE notifications SET emailed = 1');
-    await bump(tx, 'sample_academic'); // included, so upgradeSample() has nothing to add
+    // Included, so upgradeSample() has nothing to add.
+    for (const part of SAMPLE_PARTS) await bump(tx, part.counter);
     await bump(tx, 'org');
   });
 }
@@ -395,26 +398,108 @@ async function academicSample(prepare, ids, hash) {
   }
 }
 
-// Sample parts added after a site first loaded the sample (so far, the Academic
-// Material team): added once, under the Head of Company the sample belongs to.
+// The online platform team under the Product Owner: the content upload schedule,
+// exams, forums and student complaints.
+const PLATFORM_PEOPLE = [
+  ['plat1', 'Mai Hossam', 'platform1@taskflow.local', 'platform_member', 'po', '#4ade80'],
+  ['plat2', 'Kareem Adel', 'platform2@taskflow.local', 'platform_member', 'po', '#16a34a'],
+];
+
+async function platformSample(prepare, ids, hash) {
+  if (!ids.po) return;
+  const insUser = prepare('INSERT INTO users (name, email, password_hash, role, title, manager_id, avatar_color) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  for (const [key, name, email, role, mgr, color] of PLATFORM_PEOPLE) {
+    ids[key] = (await insUser.run(name, email, hash, role, null, ids[mgr], color)).lastInsertRowid;
+  }
+  const { project, task } = sampleHelpers(prepare, ids);
+  const members = ['plat1', 'plat2', ...['cs', 'hoc'].filter((k) => ids[k])];
+  const term = await project('Online platform — Term 1', 'What goes on the platform and when: lessons, exams, forums and student complaints.', 'product', 'po', members, '#22c55e', 90);
+  // The SOP as a checklist, with the first `done` steps ticked.
+  const sop = (type, done = 0) => SOPS[type].en.map((text, i) => [text, i < done]);
+
+  // Upload schedule: one physics lesson a week, chemistry alongside.
+  const physics = ['Motion & Velocity', 'Newton’s Laws', 'Work & Energy', 'Momentum', 'Circular Motion', 'Gravity', 'Waves', 'Sound'];
+  for (const [i, name] of physics.entries()) {
+    const due = (i - 3) * 7;
+    const status = due < 0 ? 'done' : due === 0 ? 'in_progress' : 'todo';
+    await task(term, `Upload Physics Lesson ${i + 1}: ${name}`, 'content_upload', status, due <= 7 ? 'high' : 'medium', i % 2 ? 'plat2' : 'plat1', 'po', due, {
+      track: 'general,azhar',
+      doneAgo: -due,
+      checklist: sop('content_upload', status === 'done' ? 7 : status === 'in_progress' ? 3 : 0),
+    });
+  }
+  const chemistry = [['Reaction Rates', -3, 'done'], ['Chemical Equilibrium', -1, 'todo'], ['Galvanic Cells', 4, 'todo'], ['Electrolysis', 11, 'todo']];
+  for (const [i, [name, due, status]] of chemistry.entries()) {
+    await task(term, `Upload Chemistry Lesson ${i + 1}: ${name}`, 'content_upload', status, 'high', 'plat1', 'po', due, {
+      track: 'general',
+      doneAgo: 3,
+      checklist: sop('content_upload', status === 'done' ? 7 : 0),
+      comments: due === -1 ? [['plat1', 'Waiting on the final cut from the content team.']] : [],
+    });
+  }
+
+  // Exams
+  await task(term, 'Physics Unit 1 exam on the platform', 'platform_exam', 'in_progress', 'urgent', 'plat2', 'po', 2, { track: 'general,azhar', reviewer: 'po', checklist: sop('platform_exam', 3) });
+  await task(term, 'Chemistry Quiz 6 on the platform', 'platform_exam', 'done', 'high', 'plat2', 'po', -4, { track: 'general', doneAgo: 4, checklist: sop('platform_exam', 7) });
+  await task(term, 'Publish the results of Physics Quiz 5', 'exam_results', 'todo', 'high', 'plat2', 'po', 1, { checklist: sop('exam_results', 1) });
+
+  // Forums
+  await task(term, 'Forum moderation — this week', 'forum_moderation', 'in_progress', 'medium', 'plat2', 'po', 3, { checklist: sop('forum_moderation', 2) });
+  await task(term, 'Pin the answer about exam attempts in the forum', 'forum_moderation', 'done', 'low', 'plat2', 'po', -2, { doneAgo: 2 });
+
+  // Complaints, many of them raised by Customer Service.
+  const raisedBy = ids.cs ? 'cs' : 'po';
+  await task(term, 'Complaint: video stops after 10 minutes (Sara Ali)', 'complaint', 'in_progress', 'urgent', 'plat1', raisedBy, 0, {
+    tags: 'video',
+    desc: 'Happens on Physics Lesson 3 on her phone. Phone: +20 100 123 4502.',
+    checklist: sop('complaint', 3),
+    comments: [['plat1', 'Reproduced on Android Chrome. Passing it to Systems Ops as a bug.']],
+  });
+  await task(term, 'Complaint: charged twice for Physics 101', 'complaint', 'todo', 'high', 'po', raisedBy, 1, { tags: 'payment', checklist: sop('complaint', 1) });
+  await task(term, 'Complaint: exam closed before the time ended', 'complaint', 'done', 'high', 'plat2', raisedBy, -3, { tags: 'exams', doneAgo: 2, checklist: sop('complaint', 6) });
+  await task(term, 'Complaint: my forum post was removed', 'complaint', 'todo', 'low', 'plat2', raisedBy, 3, { tags: 'forum', checklist: sop('complaint') });
+}
+
+// Sample parts added after a site first loaded the sample: each is added once
+// (its counter marks it), under the Head of Company the sample belongs to.
+const SAMPLE_PARTS = [
+  { counter: 'sample_academic', marker: 'academic.head@taskflow.local', add: academicSample },
+  { counter: 'sample_platform', marker: 'platform1@taskflow.local', add: platformSample },
+];
+
 export async function upgradeSample(db) {
-  if ((await readCounter(db, 'sample_academic')) || !(await hasSampleData(db))) return false;
+  const missing = async (q) => {
+    const out = [];
+    for (const part of SAMPLE_PARTS) if (!(await readCounter(q, part.counter))) out.push(part);
+    return out;
+  };
+  if (!(await missing(db)).length || !(await hasSampleData(db))) return false;
   return db.tx(async (tx) => {
     await tx.run('SELECT pg_advisory_xact_lock(4245)');
-    if (await readCounter(tx, 'sample_academic')) return false;
-    await bump(tx, 'sample_academic');
-    if (await tx.get("SELECT 1 FROM users WHERE email = 'academic.head@taskflow.local'")) return false;
+    const parts = await missing(tx);
+    if (!parts.length) return false;
+    for (const part of parts) await bump(tx, part.counter);
     const ops = await tx.get(
       "SELECT o.password_hash, c.id AS ceo_id FROM users o JOIN users c ON c.id = o.manager_id AND c.role = 'ceo' WHERE o.email = 'ops@taskflow.local'",
     );
     if (!ops) return false;
+    // The sample people already there, by their keys.
+    const ids = { ceo: ops.ceo_id };
+    const byEmail = Object.fromEntries((await tx.all('SELECT id, email FROM users WHERE email = ANY(?::text[])', [PEOPLE.map((p) => p[2])])).map((u) => [u.email, u.id]));
+    for (const [key, , email] of PEOPLE) if (key !== 'ceo' && byEmail[email]) ids[key] = byEmail[email];
     // The same kind of password as the rest of the sample people.
     const demo = verifyPassword(DEMO_PASSWORD, ops.password_hash);
+    const hash = hashPassword(demo ? DEMO_PASSWORD : crypto.randomBytes(24).toString('base64url'));
     const { prepare, flush } = await bulkWriter(tx);
-    await academicSample(prepare, { ceo: ops.ceo_id }, hashPassword(demo ? DEMO_PASSWORD : crypto.randomBytes(24).toString('base64url')));
+    let added = false;
+    for (const part of parts) {
+      if (await tx.get('SELECT 1 FROM users WHERE email = ?', [part.marker])) continue;
+      await part.add(prepare, ids, hash);
+      added = true;
+    }
     await flush();
     await bump(tx, 'org');
-    return true;
+    return added;
   });
 }
 

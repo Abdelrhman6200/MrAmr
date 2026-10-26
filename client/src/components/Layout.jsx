@@ -6,6 +6,7 @@ import { Avatar, timeAgo, useTaskDialog } from './ui.jsx';
 import TaskDetail from './TaskDetail.jsx';
 import TaskForm from './TaskForm.jsx';
 import Icon from './Icon.jsx';
+import { canSeePlatform } from '../pages/Platform.jsx';
 
 const NAV = [
   { to: '/', key: 'nav.dashboard', icon: 'dashboard', end: true },
@@ -16,6 +17,7 @@ const NAV = [
   { to: '/calls', key: 'nav.calls', icon: 'calls', calls: true },
   { to: '/team', key: 'nav.team', icon: 'team' },
   { to: '/reports', key: 'nav.reports', icon: 'reports' },
+  { to: '/platform', key: 'nav.platform', icon: 'upload', platform: true },
   { to: '/sops', key: 'sop.title', icon: 'checklist' },
 ];
 
@@ -139,7 +141,7 @@ function Notifications() {
 }
 
 export default function Layout({ children }) {
-  const { user, logout, roleLabel, isUserAdmin, canUseCalls, toast, t } = useApp();
+  const { user, meta, logout, roleLabel, isUserAdmin, canUseCalls, toast, t } = useApp();
   const { current, create } = useTaskDialog();
   const [menu, setMenu] = useState(false);
   const location = useLocation();
@@ -162,7 +164,7 @@ export default function Layout({ children }) {
           {t('nav.newTask')}
         </button>
         <nav>
-          {NAV.filter((n) => !n.calls || canUseCalls).map((n) => (
+          {NAV.filter((n) => (!n.calls || canUseCalls) && (!n.platform || canSeePlatform(meta, user))).map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className="nav-link">
               <Icon name={n.icon} />
               {t(n.key)}
