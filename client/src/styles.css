@@ -2869,6 +2869,9 @@ html[lang='ar'] .auth-pitch h1 {
   border-top: 1px dashed var(--border);
 }
 .sop-done .icon {
+  display: inline-block;
+  vertical-align: -2px;
+  transform: none;
   margin-inline-end: 4px;
 }
 .sop-done .icon {
