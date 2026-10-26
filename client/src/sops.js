@@ -210,16 +210,16 @@ const BUILT_IN = {
   // Academic Material
   hw_grading: {
     en: {
-      when: 'Homework papers collected at a center.',
-      target: 'Marks in the sheet within 48 hours of collecting.',
-      steps: ['!Collect the homework papers from the center', '!Grade using the homework model answer', 'Write down the common mistakes', '!Enter the marks in the sheet', '!Return the papers to the center', 'Send the common mistakes to the teacher'],
-      done: 'Every paper is marked and returned, and the marks are in the sheet.',
+      when: 'Students hand in homework at the center; it is graded on the spot.',
+      target: 'Graded and back with the students before they leave the class.',
+      steps: ['!Collect the homework from the students', '!Grade it on the model answer', '!Write down the common wrong answers', '!Enter each student’s mark in the system', '!Hand the homework back to each student, stamped on the cover', '!Send the common wrong answers and questions to the Head of Academic Material'],
+      done: 'Every homework is graded, stamped and back with its student, every mark is in the system, and the common mistakes are with the Head of Academic Material.',
     },
     ar: {
-      when: 'ورق واجب اتجمّع في سنتر.',
-      target: 'الدرجات في الشيت خلال 48 ساعة من الاستلام.',
-      steps: ['!استلم ورق الواجب من السنتر', '!صحّح على نموذج إجابة الواجب', 'سجّل الأخطاء المتكررة', '!ادخل الدرجات في الشيت', '!سلّم الورق للسنتر', 'ابعت الأخطاء المتكررة للمستر'],
-      done: 'كل الورق اتصحح واترجع، والدرجات في الشيت.',
+      when: 'الطلبة بيسلّموا الواجب في السنتر، وبيتصحح في ساعتها.',
+      target: 'يتصحح ويرجع للطلبة قبل ما يمشوا من الحصة.',
+      steps: ['!استلم الواجب من الطلبة', '!صحّح على نموذج الإجابة', '!سجّل الإجابات الغلط المتكررة', '!سجّل درجة كل طالب على السيستم', '!رجّع الواجب لكل طالب مختوم على الغلاف', '!ابعت الإجابات الغلط والأسئلة المتكررة لرئيس المادة العلمية'],
+      done: 'كل واجب اتصحح واتختم ورجع لصاحبه، وكل الدرجات على السيستم، والأخطاء المتكررة وصلت لرئيس المادة العلمية.',
     },
   },
   exam_proctoring: {
