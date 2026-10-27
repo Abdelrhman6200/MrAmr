@@ -3076,6 +3076,7 @@ html[lang='ar'] .auth-pitch h1 {
 /* Grades */
 .grades-new {
   margin-bottom: 14px;
+  align-self: flex-start;
 }
 .mark-entry h2 {
   margin: 8px 0 2px;

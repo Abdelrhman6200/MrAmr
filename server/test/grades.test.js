@@ -69,8 +69,11 @@ test('the academic team records marks; others look them up or can’t see them',
   assert.equal(Number(list.average), 8.5);
 
   const report = (await cs.call('GET', `/grades/students/${ahmed.id}`)).body;
-  assert.equal(report.marks[0].mark, 8.5);
+  assert.equal(report.marks.find((m) => m.id === hw.body.id).mark, 8.5);
   assert.equal((await cs.call('GET', '/grades/students?q=B-1001')).body.students[0].average, 85);
+  // The sample students and their marks are there too.
+  const sample = (await cs.call('GET', '/grades/students?q=TF-1001')).body.students[0];
+  assert.ok(sample && sample.average > 0);
 
   // Clearing a mark removes it.
   await asst.call('PUT', `/grades/assessments/${hw.body.id}/marks/${ahmed.id}`, { mark: '' });

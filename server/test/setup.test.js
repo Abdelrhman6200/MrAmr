@@ -141,7 +141,8 @@ test('an interrupted automatic load leaves nothing behind and is retried', async
   if (await hasSampleData(db)) await removeSampleData(db, ceo);
   await db.run("DELETE FROM app_state WHERE key = 'sample_auto'");
   // Simulate the server being stopped part-way: the insert of the tasks fails.
-  await db.run("ALTER TABLE tasks ADD CONSTRAINT block_sample CHECK (title <> 'Q4 budget review')");
+  // (In either language: the sample follows the Head of Company's.)
+  await db.run("ALTER TABLE tasks ADD CONSTRAINT block_sample CHECK (title NOT IN ('Q4 budget review', 'مراجعة ميزانية الربع الرابع'))");
   await assert.rejects(autoLoadSample(db, ceo.email));
   assert.equal(await hasSampleData(db), false);
   assert.match(await readStatus(db, 'sample'), /^failed/);
@@ -150,6 +151,10 @@ test('an interrupted automatic load leaves nothing behind and is retried', async
   // The next attempt (next start, or the Head of Company opening the dashboard) works.
   assert.equal(await autoLoadSample(db, ceo.email), true);
   assert.match(await readStatus(db, 'sample'), /^loaded under/);
+  // In the Head of Company's language.
+  const lang = ceo.language === 'ar' ? 'ar' : 'en';
+  const title = lang === 'ar' ? 'مراجعة ميزانية الربع الرابع' : 'Q4 budget review';
+  assert.ok(await db.get('SELECT 1 FROM tasks WHERE title = ?', [title]));
 });
 
 test('a load the previous version marked done but never finished is retried', async () => {

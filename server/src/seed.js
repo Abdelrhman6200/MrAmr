@@ -6,6 +6,7 @@ import { bump, databaseUrl, openDb, readCounter } from './db.js';
 import { localDate, nowUtc, utcAgo, DAY } from './time.js';
 import { weekStart } from './weekly.js';
 import { SOPS } from '../../client/src/sops.js';
+import { sampleTranslator } from './sampleAr.js';
 
 export const DEMO_PASSWORD = 'password123';
 
@@ -50,14 +51,16 @@ const ID_TABLES = [
   'notifications',
   'center_assignments',
   'delegations',
+  'students',
+  'assessments',
 ];
 
 // Rows are collected first and written in a few bulk statements by flush():
 // a hosted database may be far away, and hundreds of one-row inserts would take
 // longer than a serverless request may run. Ids are reserved up front, so later
 // rows can refer to earlier ones before anything is written. Every row is listed
-// in sample_rows.
-async function bulkWriter(tx) {
+// in sample_rows. `tr` turns each value written into the sample's language.
+async function bulkWriter(tx, tr = (v) => v) {
   const reserved = {};
   for (const r of await tx.all(
     `SELECT t.tbl, nextval(pg_get_serial_sequence(t.tbl, 'id'))::int AS id
@@ -71,6 +74,7 @@ async function bulkWriter(tx) {
   const prepare = (sql) => ({
     run: async (...params) => {
       const table = /^\s*INSERT INTO (\w+)/i.exec(sql)[1];
+      params = params.map(tr);
       let id = null;
       if (ID_TABLES.includes(table)) {
         id = reserved[table].shift();
@@ -154,9 +158,10 @@ function sampleHelpers(prepare, ids) {
 // `ceo`: an existing Head of Company to build the sample team under (instead of
 // creating the demo one). The sample people then get random passwords nobody
 // knows, so a live site doesn't gain accounts with a published password.
-export async function seed(db, { ceo = null } = {}) {
+// `lang`: the sample's language (default: the Head of Company's).
+export async function seed(db, { ceo = null, lang = ceo?.language } = {}) {
   await db.tx(async (tx) => {
-    const { prepare, flush } = await bulkWriter(tx);
+    const { prepare, flush } = await bulkWriter(tx, sampleTranslator(lang));
     const hash = hashPassword(ceo ? crypto.randomBytes(24).toString('base64url') : DEMO_PASSWORD);
     const ids = {};
     if (ceo) ids.ceo = ceo.id;
@@ -254,6 +259,7 @@ export async function seed(db, { ceo = null } = {}) {
     await platformSample(prepare, ids, hash);
     await csLeadSample(prepare, ids, hash);
     await mediaSample(prepare, ids, hash);
+    await gradesSample(prepare, ids, hash);
 
     // Customer Service call list
     const callList = (
@@ -327,7 +333,7 @@ export async function seed(db, { ceo = null } = {}) {
 
     await flush();
     // Sample notifications are history, not news: never email them.
-    await tx.run('UPDATE notifications SET emailed = 1');
+    await tx.run('UPDATE notifications SET emailed = 1, whatsapped = 1');
     // Included, so upgradeSample() has nothing to add.
     for (const part of SAMPLE_PARTS) await bump(tx, part.counter);
     await bump(tx, 'org');
@@ -512,6 +518,51 @@ async function mediaSample(prepare, ids, hash) {
   }
 }
 
+// Students of the chemistry course, two homework/exam sheets and a quiz, with
+// marks (a couple absent), so the Grades page has something to show.
+const STUDENTS = [
+  ['Malak Hesham', 'general', 'Saturday 10 am'],
+  ['Ziad Tamer', 'general', 'Saturday 10 am'],
+  ['Habiba Ayman', 'azhar', 'Saturday 10 am'],
+  ['Adham Sherif', 'general', 'Saturday 10 am'],
+  ['Jana Walid', 'azhar', 'Saturday 10 am'],
+  ['Seif Ahmed', 'general', 'Saturday 10 am'],
+  ['Rawan Khaled', 'general', 'Sunday 4 pm'],
+  ['Marwan Hesham', 'azhar', 'Sunday 4 pm'],
+  ['Nour El Din Ali', 'general', 'Sunday 4 pm'],
+  ['Farida Mostafa', 'general', 'Sunday 4 pm'],
+  ['Yassin Omar', 'baccalaureate', 'Sunday 4 pm'],
+  ['Lojain Samir', 'general', 'Sunday 4 pm'],
+];
+
+async function gradesSample(prepare, ids) {
+  const grader = ids.asst1 ?? ids.ceo;
+  const insStudent = prepare('INSERT INTO students (name, code, phone, parent_phone, track, group_name) VALUES (?, ?, ?, ?, ?, ?)');
+  const students = [];
+  for (const [i, [name, track, group]] of STUDENTS.entries()) {
+    const n = String(1001 + i);
+    const id = (await insStudent.run(name, `TF-${n}`, `+20 101 555 ${n}`, `+20 122 555 ${n}`, track, group)).lastInsertRowid;
+    students.push({ id, group });
+  }
+  const insAssessment = prepare('INSERT INTO assessments (title, kind, track, group_name, held_on, max_mark, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const insMark = prepare('INSERT INTO marks (assessment_id, student_id, mark, absent, note, graded_by, graded_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const sheets = [
+    ['Homework 4 — Reaction rates', 'homework', 'Saturday 10 am', -6, 10],
+    ['Monthly exam — October', 'exam', '', -3, 50],
+    ['Quiz 6 — Chemical equilibrium', 'quiz', 'Sunday 4 pm', -1, 20],
+  ];
+  for (const [s, [title, kind, group, held, max]] of sheets.entries()) {
+    const aid = (await insAssessment.run(title, kind, '', group, day(held), max, grader)).lastInsertRowid;
+    for (const [i, st] of students.entries()) {
+      if (group && st.group !== group) continue;
+      // Marks between 55% and 100%, the same every time; one absent per sheet.
+      const absent = (i + s) % 7 === 3;
+      const mark = absent ? null : Math.round(max * (0.55 + (((i * 37 + s * 11) % 46) / 100)) * 2) / 2;
+      await insMark.run(aid, st.id, mark, absent ? 1 : 0, s === 1 && i === 2 ? 'Late, came in at minute 20' : '', grader, daysAgoUtc(-held - 1 > 0 ? -held - 1 : 0));
+    }
+  }
+}
+
 // Sample parts added after a site first loaded the sample: each is added once
 // (its counter marks it), under the Head of Company the sample belongs to.
 const SAMPLE_PARTS = [
@@ -519,6 +570,7 @@ const SAMPLE_PARTS = [
   { counter: 'sample_platform', marker: 'platform1@taskflow.local', add: platformSample },
   { counter: 'sample_cs_lead', marker: 'cs.lead@taskflow.local', add: csLeadSample },
   { counter: 'sample_media', marker: 'media1@taskflow.local', add: mediaSample },
+  { counter: 'sample_grades', marker: null, add: gradesSample },
 ];
 
 export async function upgradeSample(db) {
@@ -534,20 +586,23 @@ export async function upgradeSample(db) {
     if (!parts.length) return false;
     for (const part of parts) await bump(tx, part.counter);
     const ops = await tx.get(
-      "SELECT o.password_hash, c.id AS ceo_id FROM users o JOIN users c ON c.id = o.manager_id AND c.role = 'ceo' WHERE o.email = 'ops@taskflow.local'",
+      "SELECT o.password_hash, c.id AS ceo_id, c.language FROM users o JOIN users c ON c.id = o.manager_id AND c.role = 'ceo' WHERE o.email = 'ops@taskflow.local'",
     );
     if (!ops) return false;
     // The sample people already there, by their keys.
     const ids = { ceo: ops.ceo_id };
-    const byEmail = Object.fromEntries((await tx.all('SELECT id, email FROM users WHERE email = ANY(?::text[])', [PEOPLE.map((p) => p[2])])).map((u) => [u.email, u.id]));
-    for (const [key, , email] of PEOPLE) if (key !== 'ceo' && byEmail[email]) ids[key] = byEmail[email];
+    const everyone = [...PEOPLE, ...ACADEMIC_PEOPLE, ...PLATFORM_PEOPLE, ...CS_LEAD_PEOPLE, ...MEDIA_PEOPLE];
+    const byEmail = Object.fromEntries((await tx.all('SELECT id, email FROM users WHERE email = ANY(?::text[])', [everyone.map((p) => p[2])])).map((u) => [u.email, u.id]));
+    for (const [key, , email] of everyone) if (key !== 'ceo' && byEmail[email]) ids[key] = byEmail[email];
     // The same kind of password as the rest of the sample people.
     const demo = verifyPassword(DEMO_PASSWORD, ops.password_hash);
     const hash = hashPassword(demo ? DEMO_PASSWORD : crypto.randomBytes(24).toString('base64url'));
-    const { prepare, flush } = await bulkWriter(tx);
+    const { prepare, flush } = await bulkWriter(tx, sampleTranslator(ops.language));
     let added = false;
     for (const part of parts) {
-      if (await tx.get('SELECT 1 FROM users WHERE email = ?', [part.marker])) continue;
+      // Already there (from an older version that didn't mark it)?
+      const there = part.marker ? await tx.get('SELECT 1 FROM users WHERE email = ?', [part.marker]) : await tx.get("SELECT 1 FROM students WHERE code = 'TF-1001'");
+      if (there) continue;
       await part.add(prepare, ids, hash);
       added = true;
     }
@@ -560,6 +615,8 @@ export async function upgradeSample(db) {
 // Tables in the order their sample rows can be deleted.
 const SAMPLE_TABLES = [
   'delegations',
+  'assessments',
+  'students',
   'notifications',
   'activity',
   'comments',

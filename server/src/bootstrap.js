@@ -45,7 +45,7 @@ async function firstRun(db, env, allowDemo) {
     console.warn('The database has no users. Set ADMIN_EMAIL and ADMIN_PASSWORD to create the first account.');
     return 'empty';
   }
-  await seed(db);
+  await seed(db, { lang: env.SAMPLE_LANG }); // SAMPLE_LANG=ar: the demo in Arabic
   console.log('Empty database — loaded demo organisation (password: password123). Set ADMIN_EMAIL and ADMIN_PASSWORD to start without demo data.');
   return 'demo';
 }
