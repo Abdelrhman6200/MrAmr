@@ -1,7 +1,7 @@
 // The weekly summary: from Saturday, every manager and team leader gets one
 // notification about their team's last 7 days (done, on time, late now). As a
-// notification it shows in the app, and goes out by email and WhatsApp like
-// any other. weekly_digests keeps it to one per person per week.
+// notification it shows in the app, and goes out by email like any
+// other. weekly_digests keeps it to one per person per week.
 import { isManagerRole } from './meta.js';
 import { peopleKpis } from './kpis.js';
 import { weekStart } from './weekly.js';

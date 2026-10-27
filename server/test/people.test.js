@@ -1,10 +1,9 @@
-// Leave, shifts, the audit log and WhatsApp notifications.
+// Leave, shifts, and the audit log.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
 import { DEMO_PASSWORD } from '../src/seed.js';
 import { localDate } from '../src/time.js';
-import { createWhatsApp, dispatchWhatsApp, waNumber } from '../src/whatsapp.js';
 import { testDb } from './helpers.js';
 
 let db;
@@ -86,36 +85,6 @@ test('the audit log records changes to people, SOPs, deputies and shifts', async
   assert.ok(log.some((e) => e.entity === 'sop' && e.detail.sop === 'staffing'));
   assert.ok(log.some((e) => e.entity === 'shifts'));
   assert.ok(log.some((e) => e.entity === 'leave' && e.action === 'approved'));
-});
-
-test('WhatsApp: numbers, opt-out, and one message per notification', async () => {
-  assert.equal(waNumber('0100 123 4567'), '201001234567');
-  assert.equal(waNumber('+20 100 123 4567'), '201001234567');
-  assert.equal(waNumber('123'), '');
-  assert.equal(createWhatsApp({}).enabled, false);
-
-  const sent = [];
-  const fake = createWhatsApp({ WHATSAPP_TOKEN: 't', WHATSAPP_PHONE_ID: '1', WHATSAPP_TEMPLATE: 'taskflow_update' }, async (url, init) => {
-    sent.push({ url, body: JSON.parse(init.body) });
-    return { ok: true, text: async () => '' };
-  });
-  const agent = await signIn('support2@taskflow.local');
-  const head = await signIn('cs.head@taskflow.local');
-  assert.equal((await agent.call('PATCH', `/users/${agent.user.id}`, { phone: 'abc' })).status, 400);
-  await agent.call('PATCH', `/users/${agent.user.id}`, { phone: '01001234567', language: 'ar' });
-  // Older notifications count as sent; only new ones go out.
-  await dispatchWhatsApp(db, fake, 'https://taskflow.example');
-  sent.length = 0;
-  await head.call('POST', '/tasks', { title: 'Call the Azhar parents', assignee_id: agent.user.id });
-  assert.equal(await dispatchWhatsApp(db, fake, 'https://taskflow.example'), 1);
-  assert.equal(sent[0].body.to, '201001234567');
-  assert.equal(sent[0].body.template.name, 'taskflow_update');
-  assert.match(sent[0].body.template.components[0].parameters[0].text, /Call the Azhar parents/);
-  assert.equal(await dispatchWhatsApp(db, fake, null), 0, 'never twice');
-
-  await agent.call('PATCH', `/users/${agent.user.id}`, { whatsapp_notifications: false });
-  await head.call('POST', '/tasks', { title: 'Another', assignee_id: agent.user.id });
-  assert.equal(await dispatchWhatsApp(db, fake, null), 0, 'turned off');
 });
 
 test('performance per person, and one weekly summary per manager', async () => {

@@ -333,7 +333,7 @@ export async function seed(db, { ceo = null, lang = ceo?.language } = {}) {
 
     await flush();
     // Sample notifications are history, not news: never email them.
-    await tx.run('UPDATE notifications SET emailed = 1, whatsapped = 1');
+    await tx.run('UPDATE notifications SET emailed = 1');
     // Included, so upgradeSample() has nothing to add.
     for (const part of SAMPLE_PARTS) await bump(tx, part.counter);
     await bump(tx, 'org');

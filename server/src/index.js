@@ -15,6 +15,4 @@ if (mailer.enabled && !appUrl) console.warn('SMTP is configured but APP_URL is n
 
 const app = createApp({ db, secret: loadSecret(), staticDir: STATIC_DIR, mailer, appUrl, corsOrigins: corsOrigins(), cronSecret: process.env.CRON_SECRET, digests: true });
 startNotificationEmails(app.locals.dispatchEmails, mailer);
-// WhatsApp retries, once a minute (when it is set up).
-if (process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID) setInterval(app.locals.dispatchWa, 60_000).unref();
 app.listen(PORT, () => console.log(`TaskFlow API listening on http://localhost:${PORT} (${db.kind === 'postgres' ? 'Postgres' : 'built-in database'})`));

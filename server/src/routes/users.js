@@ -145,7 +145,6 @@ export default function userRoutes({ db, access }) {
     if (b.title !== undefined) fields.title = String(b.title || '').trim();
     if (b.language !== undefined) fields.language = oneOf(b.language, ['en', 'ar'], 'language');
     if (b.email_notifications !== undefined) fields.email_notifications = b.email_notifications ? 1 : 0;
-    if (b.whatsapp_notifications !== undefined) fields.whatsapp_notifications = b.whatsapp_notifications ? 1 : 0;
     if (b.phone !== undefined) {
       fields.phone = String(b.phone || '').trim().slice(0, 30);
       if (fields.phone && !/^\+?[\d\s()-]{8,}$/.test(fields.phone)) throw badRequest('Enter a valid phone number');

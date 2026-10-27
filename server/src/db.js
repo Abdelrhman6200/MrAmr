@@ -10,7 +10,7 @@
 const NOW = "to_char(timezone('UTC', now()), 'YYYY-MM-DD HH24:MI:SS')";
 
 // Bump when the schema below changes; startup re-applies it once.
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -352,11 +352,10 @@ CREATE TABLE IF NOT EXISTS marks (
 );
 CREATE INDEX IF NOT EXISTS idx_marks_student ON marks(student_id);
 
--- WhatsApp notifications. Rows already there count as sent; new ones wait to be sent.
+-- People's mobile numbers. WhatsApp notifications were removed: drop their columns
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
-ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_notifications INTEGER NOT NULL DEFAULT 1;
-ALTER TABLE notifications ADD COLUMN IF NOT EXISTS whatsapped INTEGER NOT NULL DEFAULT 1;
-ALTER TABLE notifications ALTER COLUMN whatsapped SET DEFAULT 0;
+ALTER TABLE users DROP COLUMN IF EXISTS whatsapp_notifications;
+ALTER TABLE notifications DROP COLUMN IF EXISTS whatsapped;
 
 -- The weekly summary each manager gets (one per manager per week).
 CREATE TABLE IF NOT EXISTS weekly_digests (
