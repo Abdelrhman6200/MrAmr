@@ -105,15 +105,20 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
   // instance per day and whenever the people change (a new assistant gets
   // theirs straight away). Recurring tasks also run this when they are saved.
   let dailyChecked = null;
+  let dailyRun = null;
   api.use(async (req, _res, next) => {
     const key = `${localDate()}:${req.orgVersion}`;
     if (key === dailyChecked) return next();
-    try {
-      await ensureWeeklyDuties(db);
-      await ensureRecurring(db);
-      dailyChecked = key;
-    } catch (err) {
-      console.error('Creating recurring work failed:', err);
+    // Usually done in a moment; if the database is slow it finishes in the
+    // background rather than holding up the page.
+    if (!dailyRun) {
+      dailyRun = background('Creating recurring work', async () => {
+        await ensureWeeklyDuties(db);
+        await ensureRecurring(db);
+        dailyChecked = key;
+      }).finally(() => (dailyRun = null));
+      // Only the request that started it waits, and not for long.
+      await Promise.race([dailyRun, new Promise((r) => setTimeout(r, 4000).unref?.())]);
     }
     // The managers' weekly summaries don't hold up this request.
     if (digests) {

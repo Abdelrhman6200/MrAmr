@@ -569,8 +569,9 @@ async function createPostgres(url) {
       const client = await pool.connect();
       try {
         // A transaction left open (e.g. its serverless instance was frozen mid-way)
-        // is ended by the database instead of holding its locks for good.
-        await client.query("BEGIN; SET LOCAL idle_in_transaction_session_timeout = '30s'");
+        // is ended by the database instead of holding its locks for good, and none
+        // waits on another's locks for more than 20 s (it fails; the user retries).
+        await client.query("BEGIN; SET LOCAL idle_in_transaction_session_timeout = '30s'; SET LOCAL lock_timeout = '20s'");
         return client;
       } catch (err) {
         client.release(err); // destroys it
@@ -647,8 +648,28 @@ export const databaseUrl = (env = process.env) => env.DATABASE_URL || env.POSTGR
 // Opens the database and makes sure the schema exists.
 export async function openDb({ url = databaseUrl(), dataDir } = {}) {
   const db = url ? await createPostgres(url) : await createPglite(dataDir);
+  if (db.kind === 'postgres') await endStuckSessions(db);
   await ensureSchema(db);
   return db;
+}
+
+// Sessions stuck for good hold locks that every later request waits on: a
+// transaction left open (its serverless instance frozen or timed out mid-way)
+// and whatever has been queued behind one for minutes. Ended when a server
+// instance starts; nothing legitimate waits that long (transactions give up
+// after 20 s).
+async function endStuckSessions(db) {
+  try {
+    const ended = await db.all(
+      `SELECT pg_terminate_backend(pid) AS ok FROM pg_stat_activity
+       WHERE datname = current_database() AND pid <> pg_backend_pid() AND usename = current_user
+         AND ((state LIKE 'idle in transaction%' AND state_change < now() - interval '1 minute')
+           OR (state = 'active' AND wait_event_type = 'Lock' AND state_change < now() - interval '2 minutes'))`,
+    );
+    if (ended.length) console.warn(`Ended ${ended.length} stuck database session(s)`);
+  } catch (err) {
+    console.warn('Could not check for stuck database sessions:', err.message);
+  }
 }
 
 async function ensureSchema(db) {
@@ -656,20 +677,6 @@ async function ensureSchema(db) {
     .get("SELECT value FROM app_state WHERE key = 'schema'")
     .catch(() => null); // table doesn't exist yet
   if (current && Number(current.value) >= SCHEMA_VERSION) return;
-  // Changing a table waits for every transaction using it. End those stuck for
-  // over a minute so the update can't wait forever: transactions left open (an
-  // instance frozen mid-way) and earlier attempts at this update still waiting
-  // for a lock (their instance timed out; this version gives up after 15 s).
-  if (db.kind === 'postgres') {
-    await db
-      .run(
-        `SELECT pg_terminate_backend(pid) FROM pg_stat_activity
-         WHERE datname = current_database() AND pid <> pg_backend_pid() AND state_change < now() - interval '1 minute'
-           AND (state LIKE 'idle in transaction%'
-             OR (state = 'active' AND wait_event_type = 'Lock' AND (query LIKE 'ALTER TABLE%' OR query LIKE '%pg_advisory_xact_lock(4242)%')))`,
-      )
-      .catch((err) => console.warn('Could not end stale transactions:', err.message));
-  }
   await db.tx(async (tx) => {
     // Rather fail (the next request tries again) than wait on a lock for good.
     if (db.kind === 'postgres') await tx.run("SET LOCAL lock_timeout = '15s'");
