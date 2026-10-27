@@ -89,14 +89,14 @@ export const ROLE_SOPS = {
   academic_head: {
     en: {
       purpose: 'Leads the assistants: homework, exams, model answers and students’ questions, at the centers and on the platform.',
-      daily: ['Check what the assistants are doing today and who is at which center', 'Review model answers and exam papers sent to you', 'Collect the common mistakes and pass them to the teacher'],
+      daily: ['Check what the assistants are doing today and who is at which center', 'Review model answers and exam papers sent to you', 'Review new common mistakes (Grades → Common mistakes): write what you’ll do and mark them reviewed; pass the big ones to the teacher'],
       weekly: ['Approve each assistant’s weekly duties (books, teacher’s book, exam, class)', 'Plan the week’s grading, proctoring and question sessions and assign them', 'Check the platform questions and essays are answered on time'],
       system: ['Weekly duties are created every Saturday; you approve them', 'Use the track tags (General, Azhar, Baccalaureate) on every task', 'You can change the Academic Material SOPs on the SOPs page'],
       escalate: 'Head of Company (or the teacher for subject questions).',
     },
     ar: {
       purpose: 'بيقود الأسيستنتس: الواجبات والامتحانات ونماذج الإجابة وأسئلة الطلبة، في السناتر وعلى المنصة.',
-      daily: ['تابع الأسيستنتس بيعملوا إيه النهارده ومين في أنهي سنتر', 'راجع نماذج الإجابة وورق الامتحانات اللي اتبعتتلك', 'اجمع الأخطاء المتكررة وابعتها للمستر'],
+      daily: ['تابع الأسيستنتس بيعملوا إيه النهارده ومين في أنهي سنتر', 'راجع نماذج الإجابة وورق الامتحانات اللي اتبعتتلك', 'راجع الأخطاء الشائعة الجديدة (الدرجات ← الأخطاء الشائعة): اكتب هتعمل إيه وعلّمها اتراجعت، وابعت الكبيرة للمستر'],
       weekly: ['وافق على المهام الأسبوعية لكل أسيستنت (الكتب، كتاب المستر، الامتحان، الحصة)', 'خطط التصحيح والمراقبة واستقبال الأسئلة للأسبوع ووزّعها', 'اتأكد إن أسئلة المنصة والمقالي بتتجاوب في معادها'],
       system: ['المهام الأسبوعية بتتعمل كل سبت، وإنت اللي بتوافق عليها', 'استخدم وسوم المسار (عام، أزهر، بكالوريا) في كل مهمة', 'تقدر تعدّل إجراءات المادة العلمية من صفحة الإجراءات'],
       escalate: 'رئيس الشركة (أو المستر في الأسئلة العلمية).',

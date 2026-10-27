@@ -380,13 +380,13 @@ const BUILT_IN = {
     en: {
       when: 'Students hand in homework at the center; it is graded on the spot.',
       target: 'Graded and back with the students before they leave the class.',
-      steps: ['!Collect the homework from the students', '!Grade it on the model answer', '!Write down the common wrong answers', '!Enter each student’s mark in the system', '!Hand the homework back to each student, stamped on the cover', '!Send the common wrong answers and questions to the Head of Academic Material'],
+      steps: ['!Collect the homework from the students', '!Grade it on the model answer', '!Note the common wrong answers as you grade', '!Enter each student’s mark in the system (Grades → the homework)', '!Hand the homework back to each student, stamped on the cover', '!Record the common mistakes under the homework in Grades → Common mistakes (the Head of Academic Material is told)'],
       done: 'Every homework is graded, stamped and back with its student, every mark is in the system, and the common mistakes are with the Head of Academic Material.',
     },
     ar: {
       when: 'الطلبة بيسلّموا الواجب في السنتر، وبيتصحح في ساعتها.',
       target: 'يتصحح ويرجع للطلبة قبل ما يمشوا من الحصة.',
-      steps: ['!استلم الواجب من الطلبة', '!صحّح على نموذج الإجابة', '!سجّل الإجابات الغلط المتكررة', '!سجّل درجة كل طالب على السيستم', '!رجّع الواجب لكل طالب مختوم على الغلاف', '!ابعت الإجابات الغلط والأسئلة المتكررة لرئيس المادة العلمية'],
+      steps: ['!استلم الواجب من الطلبة', '!صحّح على نموذج الإجابة', '!دوّن الإجابات الغلط المتكررة وإنت بتصحح', '!سجّل درجة كل طالب على السيستم (الدرجات ← الواجب)', '!رجّع الواجب لكل طالب مختوم على الغلاف', '!سجّل الأخطاء الشائعة تحت الواجب في الدرجات ← الأخطاء الشائعة (رئيس المادة العلمية بيوصله إشعار)'],
       done: 'كل واجب اتصحح واتختم ورجع لصاحبه، وكل الدرجات على السيستم، والأخطاء المتكررة وصلت لرئيس المادة العلمية.',
     },
   },
@@ -408,13 +408,13 @@ const BUILT_IN = {
     en: {
       when: 'Exam papers from a center need grading.',
       target: 'Marks in the sheet within 3 days of the exam.',
-      steps: ['!Get the exam papers and the model answer', '!Grade every paper on the model answer', 'Second-check a sample of papers', '!Enter the marks in the sheet', 'Report the top students and the most missed questions'],
+      steps: ['!Get the exam papers and the model answer', '!Grade every paper on the model answer', 'Second-check a sample of papers', '!Enter the marks in the sheet', 'Record the most missed questions under the exam in Grades → Common mistakes', 'Report the top students'],
       done: 'Every paper is graded, a sample double-checked, and the marks are in the sheet.',
     },
     ar: {
       when: 'ورق امتحان من سنتر محتاج تصحيح.',
       target: 'الدرجات في الشيت خلال 3 أيام من الامتحان.',
-      steps: ['!استلم ورق الامتحان ونموذج الإجابة', '!صحّح كل الورق على النموذج', 'راجع عينة من الورق مرة تانية', '!ادخل الدرجات في الشيت', 'بلّغ بأوائل الطلبة وأكتر أسئلة غلط فيها الطلبة'],
+      steps: ['!استلم ورق الامتحان ونموذج الإجابة', '!صحّح كل الورق على النموذج', 'راجع عينة من الورق مرة تانية', '!ادخل الدرجات في الشيت', 'سجّل أكتر أسئلة غلط فيها الطلبة تحت الامتحان في الدرجات ← الأخطاء الشائعة', 'بلّغ بأوائل الطلبة'],
       done: 'كل الورق اتصحح، وعينة اتراجعت، والدرجات في الشيت.',
     },
   },
@@ -520,13 +520,13 @@ const BUILT_IN = {
     en: {
       when: 'Essay answers on the platform need grading.',
       target: 'Within 3 days of the exam closing.',
-      steps: ['Open the essay answers on the platform', '!Grade on the model answer', 'Write short feedback for each student', '!Publish the marks', 'Report the common mistakes to the teacher'],
+      steps: ['Open the essay answers on the platform', '!Grade on the model answer', 'Write short feedback for each student', '!Publish the marks', 'Record the common mistakes in Grades → Common mistakes and tell the teacher'],
       done: 'Every essay is graded and the marks are published.',
     },
     ar: {
       when: 'إجابات مقالية على المنصة محتاجة تصحيح.',
       target: 'خلال 3 أيام من قفل الامتحان.',
-      steps: ['افتح الإجابات المقالية على المنصة', '!صحّح على نموذج الإجابة', 'اكتب ملاحظة قصيرة لكل طالب', '!انشر الدرجات', 'بلّغ المستر بالأخطاء المتكررة'],
+      steps: ['افتح الإجابات المقالية على المنصة', '!صحّح على نموذج الإجابة', 'اكتب ملاحظة قصيرة لكل طالب', '!انشر الدرجات', 'سجّل الأخطاء المتكررة في الدرجات ← الأخطاء الشائعة وبلّغ المستر'],
       done: 'كل الإجابات المقالية اتصححت والدرجات اتنشرت.',
     },
   },

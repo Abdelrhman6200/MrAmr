@@ -26,6 +26,7 @@ const BACKUP_TABLES = [
   'students',
   'assessments',
   'marks',
+  'mistakes',
   'leave_requests',
   'shifts',
   'audit_log',

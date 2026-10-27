@@ -11,13 +11,15 @@ const KINDS = ['homework', 'exam', 'quiz'];
 // Who enters marks (the rest who see this page only look them up).
 export const canGrade = (meta, user) => ['executive', 'operations', 'academic'].includes(meta.roles[user.role]?.department);
 export const canSeeGrades = (meta, user) => canGrade(meta, user) || ['content', 'customer_service'].includes(meta.roles[user.role]?.department);
+// The Head of Academic Material (and leadership) reviews the common mistakes.
+const canReviewMistakes = (meta, user) => user.role === 'academic_head' || ['executive', 'operations'].includes(meta.roles[user.role]?.department);
 
 // Marks for homework, exams and quizzes. A barcode scanner types the student's
 // code and Enter, so scanning a book jumps straight to that student's mark.
 export default function Grades() {
   const { t } = useApp();
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'students' ? 'students' : 'assessments';
+  const tab = ['students', 'mistakes'].includes(params.get('tab')) ? params.get('tab') : 'assessments';
   const open = params.get('a');
   return (
     <div className="page">
@@ -33,9 +35,12 @@ export default function Grades() {
           <button className={tab === 'students' ? 'active' : ''} onClick={() => setParams({ tab: 'students' })}>
             {t('grades.students')}
           </button>
+          <button className={tab === 'mistakes' ? 'active' : ''} onClick={() => setParams({ tab: 'mistakes' })}>
+            {t('mistakes.tab')}
+          </button>
         </div>
       </div>
-      {tab === 'students' ? <Students /> : open ? <MarkEntry id={open} onBack={() => setParams({})} /> : <Assessments onOpen={(id) => setParams({ a: id })} />}
+      {tab === 'students' ? <Students /> : tab === 'mistakes' ? <Mistakes assessment={open} onAll={() => setParams({ tab: 'mistakes' })} /> : open ? <MarkEntry id={open} onBack={() => setParams({})} /> : <Assessments onOpen={(id) => setParams({ a: id })} />}
     </div>
   );
 }
@@ -269,7 +274,211 @@ function MarkEntry({ id, onBack }) {
           </tbody>
         </table>
       )}
+      <AssessmentMistakes a={a} onChange={(mistakes) => setA((x) => ({ ...x, mistakes }))} editable={editable} />
     </section>
+  );
+}
+
+// The common mistakes of one homework or exam, written down while grading.
+function AssessmentMistakes({ a, onChange, editable }) {
+  const { t, notify } = useApp();
+  const empty = { question: '', description: '', students: '' };
+  const [form, setForm] = useState(empty);
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const add = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const m = await api.post(`/grades/assessments/${a.id}/mistakes`, form);
+      onChange([...a.mistakes, m]);
+      setForm(empty);
+    } catch (err) {
+      notify(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+  const remove = async (m) => {
+    try {
+      await api.del(`/grades/mistakes/${m.id}`);
+      onChange(a.mistakes.filter((x) => x.id !== m.id));
+    } catch (err) {
+      notify(err.message, 'error');
+    }
+  };
+  return (
+    <div className="mistakes-box">
+      <h3>
+        <Icon name="alert" size={16} /> {t('mistakes.title')} <span className="muted sm">({a.mistakes.length})</span>
+      </h3>
+      <p className="muted sm">{t('mistakes.hint')}</p>
+      {a.mistakes.length > 0 && (
+        <ul className="mistake-list">
+          {a.mistakes.map((m) => (
+            <MistakeItem key={m.id} m={m} onRemove={editable ? () => remove(m) : null} />
+          ))}
+        </ul>
+      )}
+      {editable && (
+        <form className="mistake-form" onSubmit={add}>
+          <input value={form.question} onChange={set('question')} placeholder={t('mistakes.questionPh')} maxLength={100} />
+          <input value={form.description} onChange={set('description')} placeholder={t('mistakes.descriptionPh')} maxLength={1000} required />
+          <input type="number" min="0" inputMode="numeric" value={form.students} onChange={set('students')} placeholder={t('mistakes.studentsPh')} />
+          <button className="btn" disabled={saving || !form.description.trim()}>
+            <Icon name="plus" size={15} /> {t('mistakes.add')}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function MistakeItem({ m, onRemove, children }) {
+  const { t } = useApp();
+  return (
+    <li className={`mistake ${m.status}`}>
+      <div className="mistake-main">
+        {m.question && <span className="mistake-q">{m.question}</span>}
+        <span>{m.description}</span>
+        {m.students != null && <span className="mistake-count">{t('mistakes.students', { n: m.students })}</span>}
+        {m.status === 'reviewed' && <span className="pill status-done">{t('mistakes.reviewed')}</span>}
+        {onRemove && (
+          <button className="icon-btn" onClick={onRemove} title={t('common.delete')} aria-label={t('common.delete')}>
+            <Icon name="trash" size={14} />
+          </button>
+        )}
+      </div>
+      {m.response && (
+        <div className="mistake-response">
+          <strong>{t('mistakes.response')}:</strong> {m.response}
+          {m.reviewed_by_name && <span className="muted"> — {m.reviewed_by_name}</span>}
+        </div>
+      )}
+      {children}
+    </li>
+  );
+}
+
+// Every common mistake across the centers, for the Head of Academic Material:
+// newest unreviewed first, grouped by homework or exam.
+function Mistakes({ assessment, onAll }) {
+  const { meta, user, t, version, notify, trackLabel } = useApp();
+  const reviewer = canReviewMistakes(meta, user);
+  const [filters, setFilters] = useState({ status: reviewer ? 'new' : '', kind: '', track: '', q: '' });
+  const [rows, setRows] = useState(null);
+  const set = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }));
+
+  useEffect(() => {
+    const timer = setTimeout(() => api.get('/grades/mistakes', { ...filters, ...(assessment ? { a: assessment, status: '' } : {}) }).then(setRows), 200);
+    return () => clearTimeout(timer);
+  }, [filters, assessment, version]);
+
+  const review = async (m, patch) => {
+    try {
+      const next = await api.patch(`/grades/mistakes/${m.id}`, patch);
+      setRows((list) => list.map((x) => (x.id === m.id ? next : x)));
+    } catch (err) {
+      notify(err.message, 'error');
+    }
+  };
+
+  const groups = new Map();
+  for (const m of rows || []) groups.set(m.assessment_id, [...(groups.get(m.assessment_id) || []), m]);
+
+  return (
+    <>
+      <div className="filters">
+        {assessment ? (
+          <button className="btn" onClick={onAll}>
+            ← {t('mistakes.all')}
+          </button>
+        ) : (
+          <>
+            <input className="search" placeholder={t('mistakes.search')} value={filters.q} onChange={set('q')} />
+            <select value={filters.status} onChange={set('status')}>
+              <option value="">{t('mistakes.anyStatus')}</option>
+              <option value="new">{t('mistakes.new')}</option>
+              <option value="reviewed">{t('mistakes.reviewed')}</option>
+            </select>
+            <select value={filters.kind} onChange={set('kind')}>
+              <option value="">{t('mistakes.anyKind')}</option>
+              {KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {t(`grades.kind.${k}`)}
+                </option>
+              ))}
+            </select>
+            <select value={filters.track} onChange={set('track')}>
+              <option value="">{t('mistakes.anyTrack')}</option>
+              {meta.tracks.map(({ key: k }) => (
+                <option key={k} value={k}>
+                  {trackLabel(k)}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+      </div>
+      {!rows ? (
+        <Spinner />
+      ) : rows.length === 0 ? (
+        <Empty icon="done">{filters.status === 'new' && !assessment ? t('mistakes.noneNew') : t('mistakes.none')}</Empty>
+      ) : (
+        <div className="mistake-groups">
+          {[...groups.values()].map((list) => {
+            const first = list[0];
+            return (
+              <section key={first.assessment_id} className="panel">
+                <h2 className="mistake-head">
+                  {first.assessment_title}
+                  <TrackTag track={first.track} />
+                </h2>
+                <p className="muted sm">
+                  {t(`grades.kind.${first.kind}`)} · {first.group_name || t('grades.anyGroup')}
+                  {first.center_name && <> · {first.center_name}</>}
+                  {first.held_on && <> · {formatDate(first.held_on)}</>} · {t('mistakes.by', { name: [...new Set(list.map((m) => m.created_by_name).filter(Boolean))].join(', ') })}
+                </p>
+                <ul className="mistake-list">
+                  {list.map((m) => (
+                    <MistakeItem key={m.id} m={m}>
+                      {reviewer && <ReviewBox m={m} onSave={(patch) => review(m, patch)} />}
+                    </MistakeItem>
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+// What the Head of Academic Material will do about it (re-explain, a new
+// question in the next homework…), then marks it reviewed.
+function ReviewBox({ m, onSave }) {
+  const { t } = useApp();
+  const [response, setResponse] = useState(m.response || '');
+  if (m.status === 'reviewed')
+    return (
+      <button className="link sm" onClick={() => onSave({ status: 'new' })}>
+        {t('mistakes.reopen')}
+      </button>
+    );
+  return (
+    <form
+      className="mistake-review"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave({ response, status: 'reviewed' });
+      }}
+    >
+      <input value={response} onChange={(e) => setResponse(e.target.value)} placeholder={t('mistakes.responsePh')} maxLength={1000} />
+      <button className="btn primary sm">
+        <Icon name="check" size={14} /> {t('mistakes.markReviewed')}
+      </button>
+    </form>
   );
 }
 

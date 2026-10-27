@@ -17,6 +17,9 @@ const trackFrom = (v) => Object.keys(TRACK_WORDS).find((k) => TRACK_WORDS[k].tes
 
 export const canGrade = (user) => ['executive', 'operations', 'academic'].includes(departmentOf(user.role));
 export const canSeeGrades = (user) => canGrade(user) || ['content', 'customer_service'].includes(departmentOf(user.role));
+// The Head of Academic Material (and leadership) reviews the common mistakes.
+export const canReviewMistakes = (user) => user.role === 'academic_head' || ['executive', 'operations'].includes(departmentOf(user.role));
+const MISTAKE_STATUSES = ['new', 'reviewed'];
 
 export default function gradeRoutes({ db }) {
   const r = Router();
@@ -172,7 +175,8 @@ export default function gradeRoutes({ db }) {
        WHERE a.id = ? ORDER BY s.name`,
       [a.id],
     );
-    res.json({ ...a, students });
+    const mistakes = await db.all(`${MISTAKES} WHERE x.assessment_id = ? ORDER BY x.students DESC NULLS LAST, x.id`, [a.id]);
+    res.json({ ...a, students, mistakes });
   });
 
   // One student's mark (sent as soon as it is typed or scanned). A blank mark clears it.
@@ -198,6 +202,95 @@ export default function gradeRoutes({ db }) {
         [a.id, student.id, mark, absent, text(b.note, 300), req.user.id, nowUtc()],
       ),
     );
+  });
+
+  // ---- common mistakes -------------------------------------------------------
+  // Written down while grading; the Head of Academic Material is told (one unread
+  // notification per homework or exam) and reviews them on the Mistakes tab.
+  const MISTAKES = `SELECT x.*, a.title AS assessment_title, a.kind, a.track, a.group_name, a.held_on, c.name AS center_name,
+      u.name AS created_by_name, rv.name AS reviewed_by_name
+    FROM mistakes x JOIN assessments a ON a.id = x.assessment_id LEFT JOIN centers c ON c.id = a.center_id
+    LEFT JOIN users u ON u.id = x.created_by LEFT JOIN users rv ON rv.id = x.reviewed_by`;
+
+  const mistakeFields = (b) => {
+    const n = b.students === '' || b.students == null ? null : Number(b.students);
+    if (n != null && (!Number.isInteger(n) || n < 0 || n > 100000)) throw badRequest('How many students: a whole number');
+    return { question: text(b.question, 100), description: requiredString(b.description, 'description', 1000), students: n };
+  };
+
+  r.get('/mistakes', async (req, res) => {
+    const q = req.query;
+    const where = ['TRUE'];
+    const params = [];
+    if (q.a) (where.push('x.assessment_id = ?'), params.push(idParam(q.a)));
+    if (q.status) (where.push('x.status = ?'), params.push(oneOf(String(q.status), MISTAKE_STATUSES, 'status')));
+    if (q.kind) (where.push('a.kind = ?'), params.push(oneOf(String(q.kind), KINDS, 'kind')));
+    if (q.track) (where.push('a.track = ?'), params.push(track(q.track)));
+    if (q.q) {
+      where.push('(x.description ILIKE ? OR x.question ILIKE ? OR a.title ILIKE ?)');
+      params.push(...Array(3).fill(`%${q.q}%`));
+    }
+    res.json(await db.all(`${MISTAKES} WHERE ${where.join(' AND ')} ORDER BY (x.status = 'new') DESC, COALESCE(a.held_on, x.created_at) DESC, x.students DESC NULLS LAST, x.id DESC LIMIT 500`, params));
+  });
+
+  r.post('/assessments/:id/mistakes', async (req, res) => {
+    mustGrade(req);
+    const a = await db.get('SELECT * FROM assessments WHERE id = ?', [idParam(req.params.id)]);
+    if (!a) throw notFound('Not found');
+    const f = mistakeFields(req.body || {});
+    const m = await db.tx(async (tx) => {
+      const row = await tx.get('INSERT INTO mistakes (assessment_id, question, description, students, created_by) VALUES (?, ?, ?, ?, ?) RETURNING id', [a.id, f.question, f.description, f.students, req.user.id]);
+      const link = `/grades?tab=mistakes&a=${a.id}`;
+      const heads = await tx.all(
+        `SELECT id FROM users u WHERE role = 'academic_head' AND active = 1 AND id <> ?
+           AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.user_id = u.id AND n.type = 'mistakes' AND n.link = ? AND n.read = 0)`,
+        [req.user.id, link],
+      );
+      for (const h of heads) {
+        await tx.run("INSERT INTO notifications (user_id, type, message, link, params) VALUES (?, 'mistakes', ?, ?, ?)", [
+          h.id,
+          `${req.user.name} recorded common mistakes in "${a.title}"`,
+          link,
+          JSON.stringify({ actor: req.user.name, title: a.title }),
+        ]);
+      }
+      return row;
+    });
+    res.status(201).json(await db.get(`${MISTAKES} WHERE x.id = ?`, [m.id]));
+  });
+
+  // Whoever wrote it can correct it; the reviewer marks it reviewed with what will be done.
+  r.patch('/mistakes/:id', async (req, res) => {
+    const m = await db.get('SELECT * FROM mistakes WHERE id = ?', [idParam(req.params.id)]);
+    if (!m) throw notFound('Not found');
+    const b = req.body || {};
+    const own = m.created_by === req.user.id && canGrade(req.user);
+    const reviewer = canReviewMistakes(req.user);
+    if (!own && !reviewer) throw forbidden('Only who wrote it or the Head of Academic Material changes it');
+    const fields = {};
+    if (b.description !== undefined || b.question !== undefined || b.students !== undefined) {
+      Object.assign(fields, mistakeFields({ question: m.question, description: m.description, students: m.students, ...b }));
+    }
+    if (b.status !== undefined || b.response !== undefined) {
+      if (!reviewer) throw forbidden('Only the Head of Academic Material reviews mistakes');
+      if (b.response !== undefined) fields.response = text(b.response, 1000);
+      if (b.status !== undefined) {
+        fields.status = oneOf(String(b.status), MISTAKE_STATUSES, 'status');
+        fields.reviewed_by = fields.status === 'reviewed' ? req.user.id : null;
+        fields.reviewed_at = fields.status === 'reviewed' ? nowUtc() : null;
+      }
+    }
+    const changed = Object.keys(fields);
+    if (changed.length) await db.run(`UPDATE mistakes SET ${changed.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...changed.map((k) => fields[k]), m.id]);
+    res.json(await db.get(`${MISTAKES} WHERE x.id = ?`, [m.id]));
+  });
+
+  r.delete('/mistakes/:id', async (req, res) => {
+    const m = await db.get('SELECT * FROM mistakes WHERE id = ?', [idParam(req.params.id)]);
+    if (!m) throw notFound('Not found');
+    if (!(m.created_by === req.user.id && canGrade(req.user)) && !canReviewMistakes(req.user)) throw forbidden('Only who wrote it or the Head of Academic Material removes it');
+    await db.run('DELETE FROM mistakes WHERE id = ?', [m.id]);
+    res.status(204).end();
   });
 
   r.delete('/assessments/:id', async (req, res) => {

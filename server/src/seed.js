@@ -551,8 +551,10 @@ async function gradesSample(prepare, ids) {
     ['Monthly exam — October', 'exam', '', -3, 50],
     ['Quiz 6 — Chemical equilibrium', 'quiz', 'Sunday 4 pm', -1, 20],
   ];
+  const aids = [];
   for (const [s, [title, kind, group, held, max]] of sheets.entries()) {
     const aid = (await insAssessment.run(title, kind, '', group, day(held), max, grader)).lastInsertRowid;
+    aids.push(aid);
     for (const [i, st] of students.entries()) {
       if (group && st.group !== group) continue;
       // Marks between 55% and 100%, the same every time; one absent per sheet.
@@ -561,6 +563,30 @@ async function gradesSample(prepare, ids) {
       await insMark.run(aid, st.id, mark, absent ? 1 : 0, s === 1 && i === 2 ? 'Late, came in at minute 20' : '', grader, daysAgoUtc(-held - 1 > 0 ? -held - 1 : 0));
     }
   }
+  await addMistakes(prepare, ids, aids);
+}
+
+// Common mistakes on the sample homework, exam and quiz (in their order); one already reviewed.
+const SAMPLE_MISTAKES = [
+  [0, 'Q2', 'Wrote the rate as concentration × time instead of change in concentration ÷ time', 9, ''],
+  [0, 'Q4', 'Forgot the units (mol/L·s)', 6, 'Re-explain units at the start of Saturday’s class'],
+  [1, 'Q7', 'Did not balance the equation before using the mole ratio', 14, ''],
+  [1, 'Q12', 'Mixed up exothermic and endothermic on the energy diagram', 8, ''],
+  [2, 'Q3', 'Put the solids in the equilibrium constant expression', 5, ''],
+];
+async function addMistakes(prepare, ids, aids) {
+  const by = ids.asst1 ?? ids.ceo;
+  const ins = prepare('INSERT INTO mistakes (assessment_id, question, description, students, status, response, created_by, reviewed_by, reviewed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  for (const [i, question, description, students, response] of SAMPLE_MISTAKES) {
+    if (!aids[i]) continue;
+    const reviewed = !!response;
+    await ins.run(aids[i], question, description, students, reviewed ? 'reviewed' : 'new', response, by, reviewed ? (ids.acad ?? ids.ceo) : null, reviewed ? daysAgoUtc(1) : null);
+  }
+}
+// For a site that loaded the sample before mistakes were recorded.
+async function mistakesSample(prepare, ids, _hash, tx) {
+  const aids = (await tx.all("SELECT row_id FROM sample_rows WHERE tbl = 'assessments' ORDER BY row_id")).map((r) => r.row_id);
+  await addMistakes(prepare, ids, aids);
 }
 
 // Sample parts added after a site first loaded the sample: each is added once
@@ -571,6 +597,7 @@ const SAMPLE_PARTS = [
   { counter: 'sample_cs_lead', marker: 'cs.lead@taskflow.local', add: csLeadSample },
   { counter: 'sample_media', marker: 'media1@taskflow.local', add: mediaSample },
   { counter: 'sample_grades', marker: null, add: gradesSample },
+  { counter: 'sample_mistakes', there: (q) => q.get('SELECT 1 FROM mistakes LIMIT 1'), add: mistakesSample },
 ];
 
 export async function upgradeSample(db) {
@@ -601,9 +628,13 @@ export async function upgradeSample(db) {
     let added = false;
     for (const part of parts) {
       // Already there (from an older version that didn't mark it)?
-      const there = part.marker ? await tx.get('SELECT 1 FROM users WHERE email = ?', [part.marker]) : await tx.get("SELECT 1 FROM students WHERE code = 'TF-1001'");
+      const there = part.there
+        ? await part.there(tx)
+        : part.marker
+          ? await tx.get('SELECT 1 FROM users WHERE email = ?', [part.marker])
+          : await tx.get("SELECT 1 FROM students WHERE code = 'TF-1001'");
       if (there) continue;
-      await part.add(prepare, ids, hash);
+      await part.add(prepare, ids, hash, tx);
       added = true;
     }
     await flush();

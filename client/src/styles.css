@@ -3253,3 +3253,89 @@ html[lang='ar'] .auth-pitch h1 {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
 }
+
+/* Common mistakes */
+.mistakes-box {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.mistakes-box h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+.mistake-list {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.mistake {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--warn);
+  border-radius: 8px;
+  background: var(--surface);
+  display: grid;
+  gap: 6px;
+}
+.mistake.reviewed {
+  border-inline-start-color: var(--success);
+}
+.mistake-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.mistake-main .icon-btn {
+  margin-inline-start: auto;
+}
+.mistake-q {
+  font-weight: 650;
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 1px 8px;
+  font-size: 12.5px;
+}
+.mistake-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--warn);
+}
+.mistake-response {
+  font-size: 13px;
+  color: var(--text);
+}
+.mistake-form,
+.mistake-review {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) minmax(160px, 4fr) minmax(90px, 1fr) auto;
+  gap: 8px;
+}
+.mistake-review {
+  grid-template-columns: 1fr auto;
+}
+@media (max-width: 640px) {
+  .mistake-form {
+    grid-template-columns: 1fr 1fr;
+  }
+  .mistake-form input:nth-child(2) {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+}
+.mistake-groups {
+  display: grid;
+  gap: 14px;
+}
+.mistake-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}

@@ -79,3 +79,41 @@ test('the academic team records marks; others look them up or can’t see them',
   await asst.call('PUT', `/grades/assessments/${hw.body.id}/marks/${ahmed.id}`, { mark: '' });
   assert.equal((await asst.call('GET', `/grades/assessments/${hw.body.id}`)).body.students.find((s) => s.id === ahmed.id).mark, null);
 });
+
+test('common mistakes are recorded while grading and reviewed by the Head of Academic Material', async () => {
+  const asst = await signIn('assistant1@taskflow.local');
+  const head = await signIn('academic.head@taskflow.local');
+  const cs = await signIn('support1@taskflow.local');
+
+  const hw = (await asst.call('POST', '/grades/assessments', { title: 'Homework 7', kind: 'homework', max_mark: 10, track: 'azhar' })).body;
+  const first = await asst.call('POST', `/grades/assessments/${hw.id}/mistakes`, { question: 'Q3', description: 'Forgot to balance the equation', students: 14 });
+  assert.equal(first.status, 201);
+  assert.equal(first.body.assessment_title, 'Homework 7');
+  assert.equal((await asst.call('POST', `/grades/assessments/${hw.id}/mistakes`, { description: '' })).status, 400);
+  assert.equal((await asst.call('POST', `/grades/assessments/${hw.id}/mistakes`, { description: 'x', students: 2.5 })).status, 400);
+  await asst.call('POST', `/grades/assessments/${hw.id}/mistakes`, { question: 'Q5', description: 'Wrong units', students: 6 });
+  assert.equal((await cs.call('POST', `/grades/assessments/${hw.id}/mistakes`, { description: 'x' })).status, 403);
+
+  // They show on the homework, most students first.
+  const roster = (await asst.call('GET', `/grades/assessments/${hw.id}`)).body;
+  assert.deepEqual(roster.mistakes.map((m) => m.question), ['Q3', 'Q5']);
+
+  // One unread notification per homework, however many mistakes.
+  const notes = (await head.call('GET', '/notifications')).body;
+  const mine = (notes.items || notes).filter((n) => n.type === 'mistakes' && n.link === `/grades?tab=mistakes&a=${hw.id}`);
+  assert.equal(mine.length, 1);
+
+  const fresh = (await head.call('GET', '/grades/mistakes?status=new&track=azhar')).body;
+  assert.ok(fresh.some((m) => m.id === first.body.id));
+  assert.equal((await asst.call('PATCH', `/grades/mistakes/${first.body.id}`, { status: 'reviewed' })).status, 403, 'assistants don’t review');
+  assert.equal((await asst.call('PATCH', `/grades/mistakes/${first.body.id}`, { students: 15 })).body.students, 15, 'but fix their own');
+
+  const done = (await head.call('PATCH', `/grades/mistakes/${first.body.id}`, { status: 'reviewed', response: 'Re-explain on Saturday' })).body;
+  assert.equal(done.status, 'reviewed');
+  assert.equal(done.reviewed_by_name, 'Sherif Abdallah');
+  assert.ok(!(await head.call('GET', '/grades/mistakes?status=new')).body.some((m) => m.id === first.body.id));
+  assert.equal((await head.call('GET', `/grades/mistakes?a=${hw.id}`)).body.length, 2);
+
+  assert.equal((await cs.call('DELETE', `/grades/mistakes/${first.body.id}`)).status, 403);
+  assert.equal((await head.call('DELETE', `/grades/mistakes/${first.body.id}`)).status, 204);
+});

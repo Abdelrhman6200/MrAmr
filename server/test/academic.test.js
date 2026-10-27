@@ -173,7 +173,7 @@ test('new tasks start with their type’s SOP, which the responsible managers ca
   const bare = (await asst.call('POST', '/tasks', { title: 'Bare', type: 'exam_grading', checklist: [] })).body;
   assert.equal((await asst.call('POST', `/tasks/${bare.id}/checklist/sop`)).status, 201);
   const steps = (await asst.call('GET', `/tasks/${bare.id}`)).body.checklist;
-  assert.equal(steps.length, 5);
+  assert.equal(steps.length, 6);
   assert.equal(steps.filter((c) => c.required).length, 3);
 
   // Usage over the tasks the user can see.

@@ -10,7 +10,7 @@
 const NOW = "to_char(timezone('UTC', now()), 'YYYY-MM-DD HH24:MI:SS')";
 
 // Bump when the schema below changes; startup re-applies it once.
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -443,6 +443,22 @@ CREATE TABLE IF NOT EXISTS platform_progress (
   imported_at TEXT NOT NULL DEFAULT ${NOW}
 );
 CREATE INDEX IF NOT EXISTS idx_platform_progress_course ON platform_progress(course);
+
+-- Common mistakes found while grading a homework or exam, for the Head of Academic Material
+CREATE TABLE IF NOT EXISTS mistakes (
+  id SERIAL PRIMARY KEY,
+  assessment_id INTEGER NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+  question TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL,
+  students INTEGER,
+  status TEXT NOT NULL DEFAULT 'new',
+  response TEXT NOT NULL DEFAULT '',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT ${NOW},
+  reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_mistakes_assessment ON mistakes(assessment_id);
 `;
 
 // Turns `?` placeholders into $1, $2 … (ignoring any inside quoted strings).

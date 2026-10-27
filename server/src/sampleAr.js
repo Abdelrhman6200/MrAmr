@@ -248,6 +248,17 @@ const PHRASES = {
   'Monthly exam — October': 'الامتحان الشهري — أكتوبر',
   'Quiz 6 — Chemical equilibrium': 'كويز 6 — الاتزان الكيميائي',
   'Late, came in at minute 20': 'اتأخر، دخل في الدقيقة 20',
+  'Wrote the rate as concentration × time instead of change in concentration ÷ time': 'كتب السرعة تركيز × زمن بدل التغير في التركيز ÷ الزمن',
+  'Forgot the units (mol/L·s)': 'نسي الوحدة (مول/لتر·ث)',
+  'Re-explain units at the start of Saturday’s class': 'نعيد شرح الوحدات في أول حصة السبت',
+  'Did not balance the equation before using the mole ratio': 'ما وزنش المعادلة قبل ما يستخدم النسبة المولية',
+  'Mixed up exothermic and endothermic on the energy diagram': 'لخبط بين الطارد والماص للحرارة في منحنى الطاقة',
+  'Put the solids in the equilibrium constant expression': 'حط المواد الصلبة في تعبير ثابت الاتزان',
+  Q2: 'س2',
+  Q3: 'س3',
+  Q4: 'س4',
+  Q7: 'س7',
+  Q12: 'س12',
 };
 
 // Every SOP step, from English to Arabic (the sample ticks some of them).
