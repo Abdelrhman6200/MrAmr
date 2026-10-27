@@ -30,25 +30,45 @@ export class ApiError extends Error {
 }
 
 let onUnauthorized = () => {};
+let onFailure = () => {};
+// Told when loading something fails (not a sign-in that expired), so a page
+// waiting on it shows why instead of loading forever. Changes report their own errors.
+export const setFailureHandler = (fn) => (onFailure = fn);
+const TIMEOUT_MS = 30_000;
 let translateMessage = (m) => m;
 export const setErrorTranslator = (fn) => (translateMessage = fn);
 export const setUnauthorizedHandler = (fn) => (onUnauthorized = fn);
 
 // Thrown when the API can't be reached or something other than the API answered
 // (e.g. a static host returning its index.html because VITE_API_URL is missing).
-const unreachable = () => new ApiError(0, 'server_unreachable', 'server_unreachable');
+const unreachable = () => new ApiError(0, translateMessage('Could not reach the server. Check your connection and try again.'), 'server_unreachable');
 
 async function request(method, path, body) {
+  try {
+    return await send(method, path, body);
+  } catch (err) {
+    if (method === 'GET' && err.status !== 401) onFailure(err);
+    throw err;
+  }
+}
+
+async function send(method, path, body) {
   const token = getToken();
   let res;
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), TIMEOUT_MS);
   try {
     res = await fetch(`${API_BASE}${path}`, {
       method,
       headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) },
       body: body ? JSON.stringify(body) : undefined,
+      signal: abort.signal,
     });
   } catch {
+    if (abort.signal.aborted) throw new ApiError(504, translateMessage('The server took too long to answer. Please try again.'), 'timeout');
     throw unreachable();
+  } finally {
+    clearTimeout(timer);
   }
   if (res.status === 204) return null;
   // Vercel answers a request that ran past its time limit with a plain-text 504.

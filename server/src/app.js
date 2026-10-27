@@ -134,13 +134,14 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
   // The template data normally loads when the server starts; if that didn't
   // finish, the Head of Company opening the dashboard tries again (once per instance).
   let sampleChecked = !autoSample;
-  api.use('/dashboard', async (req, _res, next) => {
-    if (sampleChecked || req.user.role !== 'ceo') return next();
-    try {
-      await autoLoadSample(db, req.user.email);
-      sampleChecked = true;
-    } catch (err) {
-      console.error('Loading the sample data failed:', err);
+  let sampleRun = null;
+  api.use('/dashboard', (req, _res, next) => {
+    if (!sampleChecked && !sampleRun && req.user.role === 'ceo') {
+      // In the background: the dashboard doesn't wait for it.
+      sampleRun = background('Loading the sample data', async () => {
+        await autoLoadSample(db, req.user.email);
+        sampleChecked = true;
+      }).finally(() => (sampleRun = null));
     }
     next();
   });

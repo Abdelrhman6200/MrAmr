@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api, getToken, setErrorTranslator, setToken, setUnauthorizedHandler } from './api.js';
+import { api, getToken, setErrorTranslator, setFailureHandler, setToken, setUnauthorizedHandler } from './api.js';
 import { DICTS, localeOf, setActiveLocale, translate, translateError } from './i18n.js';
 
 const LANG_KEY = 'taskflow.lang';
@@ -115,6 +115,9 @@ export function AppProvider({ children }) {
   const notify = useCallback((message, kind = 'info') => {
     setToast({ message, kind, id: Date.now() });
   }, []);
+
+  // A page that couldn't load says why (once per message).
+  useEffect(() => setFailureHandler((err) => setToast((t) => (t?.message === err.message ? t : { message: err.message, kind: 'error', id: Date.now() }))), []);
 
   useEffect(() => {
     if (!toast) return;

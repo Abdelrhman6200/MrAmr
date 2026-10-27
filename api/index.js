@@ -10,6 +10,8 @@ import { databaseUrl, openDb, storedSecret } from '../server/src/db.js';
 import { corsOrigins } from '../server/src/config.js';
 import { bootstrap } from '../server/src/bootstrap.js';
 import { createMailer } from '../server/src/mail.js';
+import { background } from '../server/src/background.js';
+import { autoLoadSample } from '../server/src/seed.js';
 
 // A deployment setting is missing or wrong; the message is shown on the sign-in screen.
 class SetupError extends Error {}
@@ -51,12 +53,14 @@ async function init() {
   try {
     // Optional: ADMIN_EMAIL/ADMIN_PASSWORD create the first account; otherwise the sign-in
     // page asks for it. Demo data only when asked for with DEMO_DATA=1.
-    // The sample team and tasks load once by themselves (SAMPLE_DATA=0 turns that off).
-    await bootstrap(db, process.env, { allowDemo: process.env.DEMO_DATA === '1', autoSample: process.env.SAMPLE_DATA !== '0' });
+    await bootstrap(db, process.env, { allowDemo: process.env.DEMO_DATA === '1' });
   } catch (err) {
     await db.close().catch(() => {});
     throw err.message.startsWith('ADMIN_') ? new SetupError(err.message) : err;
   }
+  // The sample team and tasks load once by themselves (SAMPLE_DATA=0 turns that
+  // off), in the background: requests don't wait for it.
+  if (process.env.SAMPLE_DATA !== '0') background('Loading the sample data', () => autoLoadSample(db, process.env.ADMIN_EMAIL));
   return createApp({
     db,
     secret: process.env.AUTH_SECRET || (await storedSecret(db, 'auth')),

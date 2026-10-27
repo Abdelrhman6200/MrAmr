@@ -1938,6 +1938,7 @@ const arErrors = {
   'Only the managers of this team can change its SOP': 'بس مديرين الفريق ده يقدروا يعدّلوا الإجراء بتاعه',
   'Internal server error': 'حدث خطأ في الخادم',
   'The server took too long to answer. Please try again.': 'استغرق الخادم وقتًا طويلًا للرد. حاول مرة أخرى.',
+  'Could not reach the server. Check your connection and try again.': 'تعذّر الوصول للخادم. اتأكد من الإنترنت وحاول تاني.',
   'Invalid email or password': 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
   'Not authenticated': 'يرجى تسجيل الدخول',
   'You do not have permission to do that': 'ليست لديك صلاحية لذلك',
