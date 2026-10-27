@@ -6,6 +6,64 @@ import { Avatar, Modal, PriorityTag, StatusPill, TrackPicker, TrackTag, TypeOpti
 import { sopFor } from '../sops.js';
 import Icon from './Icon.jsx';
 
+const fileSize = (n) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+
+// Files on the task: model answers, scripts, photos of complaints, exam papers…
+function Attachments({ task, onChange, onError }) {
+  const { t, user } = useApp();
+  const [busy, setBusy] = useState(false);
+  const add = async (e) => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    setBusy(true);
+    try {
+      for (const file of files) await api.upload(`/tasks/${task.id}/attachments`, file);
+    } catch (err) {
+      onError(err);
+    } finally {
+      setBusy(false);
+      onChange();
+    }
+  };
+  const open = (f) => api.openFile(`/tasks/${task.id}/attachments/${f.id}`, f.filename, f.mime).catch(onError);
+  const remove = async (f) => {
+    if (!confirm(t('files.confirmRemove', { name: f.filename }))) return;
+    await api.del(`/tasks/${task.id}/attachments/${f.id}`).then(onChange, onError);
+  };
+  return (
+    <section>
+      <h4>
+        {t('files.title')} {task.attachments.length > 0 && <span className="muted">{task.attachments.length}</span>}
+      </h4>
+      {task.attachments.length > 0 && (
+        <ul className="files">
+          {task.attachments.map((f) => (
+            <li key={f.id}>
+              <Icon name={f.mime.startsWith('image/') ? 'eye' : 'note'} size={16} />
+              <button className="link file-name" onClick={() => open(f)}>
+                {f.filename}
+              </button>
+              <span className="muted sm">
+                {fileSize(f.size)} · {f.user_name || '—'} · {timeAgo(f.created_at)}
+              </span>
+              {(f.user_id === user.id || task.can_edit) && (
+                <button className="icon-btn sm" onClick={() => remove(f)} aria-label={t('files.remove')}>
+                  <Icon name="close" size={14} />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <label className={`btn sm file-pick ${busy ? 'disabled' : ''}`}>
+        <Icon name="upload" size={14} /> {busy ? t('files.uploading') : t('files.add')}
+        <input type="file" multiple hidden disabled={busy} onChange={add} />
+      </label>
+      <span className="hint"> {t('files.limit')}</span>
+    </section>
+  );
+}
+
 function ReviewBox({ task, onDone }) {
   const [comment, setComment] = useState('');
   const [error, setError] = useState('');
@@ -235,6 +293,8 @@ export default function TaskDetail({ id }) {
               </form>
             )}
           </section>
+
+          <Attachments task={task} onChange={refresh} onError={failed} />
 
           <section>
             <div className="tabs">

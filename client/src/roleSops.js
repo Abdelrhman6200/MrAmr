@@ -118,6 +118,22 @@ export const ROLE_SOPS = {
       escalate: 'رئيس المادة العلمية.',
     },
   },
+  halls_head: {
+    en: {
+      purpose: 'Runs the exam halls at the centers: seating, proctors, papers.',
+      daily: ['On exam days: prepare the halls an hour early', 'Give each proctor their section and watch the halls', 'Count the papers against attendance and hand them to the graders'],
+      weekly: ['Agree the coming exams, halls and proctors with the Head of Academic Material', 'Check the attendance sheets and seating plans are ready'],
+      system: ['Running the exam halls tasks follow their SOP; counting the papers is required', 'Proctors have Exam proctoring tasks; check they are assigned before the day'],
+      escalate: 'Head of Academic Material.',
+    },
+    ar: {
+      purpose: 'بيدير قاعات الامتحانات في السناتر: الأماكن والمراقبين والورق.',
+      daily: ['أيام الامتحانات: جهّز القاعات قبلها بساعة', 'وزّع على كل مراقب القسم بتاعه وتابع القاعات', 'عدّ الورق على الحضور وسلّمه للمصححين'],
+      weekly: ['اتفق مع رئيس المادة العلمية على الامتحانات الجاية والقاعات والمراقبين', 'اتأكد إن كشوف الحضور وتوزيع الأماكن جاهزين'],
+      system: ['مهام "إدارة قاعات الامتحان" ماشية على الـ SOP، وعدّ الورق خطوة مطلوبة', 'المراقبين ليهم مهام "مراقبة في الامتحان"، اتأكد إنها متوزعة قبل اليوم'],
+      escalate: 'رئيس المادة العلمية.',
+    },
+  },
   marketing_manager: {
     en: {
       purpose: 'Brings in students: plans campaigns, owns the budget and reports results.',

@@ -10,7 +10,7 @@
 const NOW = "to_char(timezone('UTC', now()), 'YYYY-MM-DD HH24:MI:SS')";
 
 // Bump when the schema below changes; startup re-applies it once.
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -276,6 +276,138 @@ CREATE TABLE IF NOT EXISTS app_secrets (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- Added in schema 8 -----------------------------------------------------------
+
+-- Files on a task (kept in the database, so nothing else needs setting up).
+CREATE TABLE IF NOT EXISTS attachments (
+  id SERIAL PRIMARY KEY,
+  task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  filename TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  data BYTEA NOT NULL,
+  created_at TEXT NOT NULL DEFAULT ${NOW}
+);
+CREATE INDEX IF NOT EXISTS idx_attachments_task ON attachments(task_id);
+
+-- A task that repeats (daily, weekly on a weekday, or monthly on a day): each
+-- period gets one task, marked with recurring_id and recur_key.
+CREATE TABLE IF NOT EXISTS recurring_tasks (
+  id SERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  type TEXT NOT NULL DEFAULT 'general',
+  priority TEXT NOT NULL DEFAULT 'medium',
+  project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+  assignee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reviewer_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  track TEXT NOT NULL DEFAULT '',
+  frequency TEXT NOT NULL,
+  weekday INTEGER,
+  month_day INTEGER,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT ${NOW}
+);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurring_id INTEGER REFERENCES recurring_tasks(id) ON DELETE SET NULL;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recur_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_recurring ON tasks(recurring_id, recur_key) WHERE recurring_id IS NOT NULL;
+
+-- Students and their marks (homework, exams, quizzes). code: the barcode on their book.
+CREATE TABLE IF NOT EXISTS students (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  code TEXT UNIQUE,
+  phone TEXT DEFAULT '',
+  parent_phone TEXT DEFAULT '',
+  track TEXT NOT NULL DEFAULT '',
+  group_name TEXT NOT NULL DEFAULT '',
+  center_id INTEGER REFERENCES centers(id) ON DELETE SET NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT ${NOW}
+);
+CREATE TABLE IF NOT EXISTS assessments (
+  id SERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'homework',
+  track TEXT NOT NULL DEFAULT '',
+  group_name TEXT NOT NULL DEFAULT '',
+  center_id INTEGER REFERENCES centers(id) ON DELETE SET NULL,
+  held_on TEXT,
+  max_mark REAL NOT NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT ${NOW}
+);
+CREATE TABLE IF NOT EXISTS marks (
+  assessment_id INTEGER NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  mark REAL,
+  absent INTEGER NOT NULL DEFAULT 0,
+  note TEXT DEFAULT '',
+  graded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  graded_at TEXT,
+  PRIMARY KEY (assessment_id, student_id)
+);
+CREATE INDEX IF NOT EXISTS idx_marks_student ON marks(student_id);
+
+-- WhatsApp notifications. Rows already there count as sent; new ones wait to be sent.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_notifications INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS whatsapped INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE notifications ALTER COLUMN whatsapped SET DEFAULT 0;
+
+-- The weekly summary each manager gets (one per manager per week).
+CREATE TABLE IF NOT EXISTS weekly_digests (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  week TEXT NOT NULL,
+  sent_at TEXT NOT NULL DEFAULT ${NOW},
+  PRIMARY KEY (user_id, week)
+);
+
+-- Leave: asked for, then approved or turned down by the manager. An approved
+-- leave with a deputy also creates the delegation.
+CREATE TABLE IF NOT EXISTS leave_requests (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'annual',
+  starts_on TEXT NOT NULL,
+  ends_on TEXT NOT NULL,
+  note TEXT DEFAULT '',
+  deputy_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  decided_at TEXT,
+  decision_note TEXT DEFAULT '',
+  delegation_id INTEGER REFERENCES delegations(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT ${NOW}
+);
+CREATE INDEX IF NOT EXISTS idx_leave_dates ON leave_requests(ends_on, starts_on);
+
+-- Weekly shifts (weekday 0 = Saturday … 6 = Friday), e.g. for Customer Service.
+CREATE TABLE IF NOT EXISTS shifts (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  weekday INTEGER NOT NULL,
+  start_time TEXT NOT NULL,
+  end_time TEXT NOT NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT ${NOW},
+  UNIQUE (user_id, weekday, start_time)
+);
+
+-- Who changed what: people, permissions, SOPs, deputies, leave and handovers.
+CREATE TABLE IF NOT EXISTS audit_log (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  entity TEXT NOT NULL,
+  entity_id INTEGER,
+  detail TEXT DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT ${NOW}
+);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 `;
 
 // Turns `?` placeholders into $1, $2 … (ignoring any inside quoted strings).

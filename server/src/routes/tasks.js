@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { HttpError, badRequest, forbidden, idParam, notFound, oneOf, optionalDate, optionalId, requiredString } from '../http.js';
 import { PRIORITIES, ROLES, STATUSES, TASK_TYPES, TRACKS, keys } from '../meta.js';
 import { localDate, nowUtc } from '../time.js';
@@ -12,12 +12,17 @@ export const TASK_SELECT = `
     r.name AS reporter_name, rv.name AS reviewer_name,
     (SELECT COUNT(*) FROM checklist_items c WHERE c.task_id = t.id) AS checklist_total,
     (SELECT COUNT(*) FROM checklist_items c WHERE c.task_id = t.id AND c.done = 1) AS checklist_done,
-    (SELECT COUNT(*) FROM comments c WHERE c.task_id = t.id) AS comment_count
+    (SELECT COUNT(*) FROM comments c WHERE c.task_id = t.id) AS comment_count,
+    (SELECT COUNT(*) FROM attachments f WHERE f.task_id = t.id) AS attachment_count
   FROM tasks t
   LEFT JOIN projects p ON p.id = t.project_id
   LEFT JOIN users a ON a.id = t.assignee_id
   LEFT JOIN users r ON r.id = t.reporter_id
   LEFT JOIN users rv ON rv.id = t.reviewer_id`;
+
+// Attachments: hosting platforms cap a request at about 4.5 MB (Vercel).
+const MAX_FILE = 4 * 1024 * 1024;
+const MAX_FILES = 20;
 
 export const PRIORITY_ORDER = `CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END`;
 
@@ -187,14 +192,66 @@ export default function taskRoutes({ db, access }) {
   // ---- detail -----------------------------------------------------------
   r.get('/:id', async (req, res) => {
     const t = await loadVisible(req);
-    const [checklist, comments, activity, detail, p] = await Promise.all([
+    const [checklist, comments, activity, attachments, detail, p] = await Promise.all([
       db.all('SELECT * FROM checklist_items WHERE task_id = ? ORDER BY position, id', [t.id]),
       db.all('SELECT c.*, u.name AS user_name, u.avatar_color FROM comments c JOIN users u ON u.id = c.user_id WHERE c.task_id = ? ORDER BY c.id', [t.id]),
       db.all('SELECT a.*, u.name AS user_name FROM activity a LEFT JOIN users u ON u.id = a.user_id WHERE a.task_id = ? ORDER BY a.id DESC LIMIT 50', [t.id]),
+      db.all('SELECT f.id, f.filename, f.mime, f.size, f.user_id, f.created_at, u.name AS user_name FROM attachments f LEFT JOIN users u ON u.id = f.user_id WHERE f.task_id = ? ORDER BY f.id', [t.id]),
       full(t.id),
       perms(req.user, t),
     ]);
-    res.json({ ...detail, checklist: checklist.map((c) => ({ ...c, done: !!c.done, required: !!c.required })), comments, activity, ...p });
+    res.json({ ...detail, checklist: checklist.map((c) => ({ ...c, done: !!c.done, required: !!c.required })), comments, activity, attachments, ...p });
+  });
+
+  // ---- attachments -------------------------------------------------------
+  // The file is the request body, sent as application/octet-stream (up to
+  // MAX_FILE); its name and type are ?name= and ?type=. Anyone who can see the
+  // task can add files; the uploader or an editor removes them.
+  r.post('/:id/attachments', express.raw({ type: 'application/octet-stream', limit: MAX_FILE }), async (req, res) => {
+    const t = await loadVisible(req);
+    const data = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    if (!data.length) throw badRequest('Choose a file to attach');
+    const filename = String(req.query.name || 'file').replace(/[\\/\r\n"]/g, '_').trim().slice(0, 200) || 'file';
+    const mime = String(req.query.type || '').trim().slice(0, 100) || 'application/octet-stream';
+    const count = await db.get('SELECT COUNT(*)::int AS n FROM attachments WHERE task_id = ?', [t.id]);
+    if (count.n >= MAX_FILES) throw badRequest(`A task can have at most ${MAX_FILES} files`);
+    const row = await db.tx(async (tx) => {
+      const f = await tx.get('INSERT INTO attachments (task_id, user_id, filename, mime, size, data) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, filename, mime, size, user_id, created_at', [
+        t.id,
+        req.user.id,
+        filename,
+        mime,
+        data.length,
+        data,
+      ]);
+      await log(tx, t, req.user.id, 'attached', filename);
+      return f;
+    });
+    res.status(201).json({ ...row, user_name: req.user.name });
+  });
+
+  r.get('/:id/attachments/:fileId', async (req, res) => {
+    const t = await loadVisible(req);
+    const f = await db.get('SELECT * FROM attachments WHERE id = ? AND task_id = ?', [idParam(req.params.fileId), t.id]);
+    if (!f) throw notFound('File not found');
+    // Only images and PDFs open in the browser; everything else downloads (so no HTML or SVG runs).
+    const inline = /^image\/(png|jpe?g|gif|webp)$|^application\/pdf$/.test(f.mime);
+    res.setHeader('content-type', inline ? f.mime : 'application/octet-stream');
+    res.setHeader('content-disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(f.filename)}`);
+    res.setHeader('cache-control', 'private, max-age=3600');
+    res.send(Buffer.from(f.data));
+  });
+
+  r.delete('/:id/attachments/:fileId', async (req, res) => {
+    const t = await loadVisible(req);
+    const f = await db.get('SELECT id, user_id, filename FROM attachments WHERE id = ? AND task_id = ?', [idParam(req.params.fileId), t.id]);
+    if (!f) throw notFound('File not found');
+    if (f.user_id !== req.user.id && !(await access.canEditTask(req.user, t))) throw forbidden('Only whoever added the file or someone who can edit the task can remove it');
+    await db.tx(async (tx) => {
+      await tx.run('DELETE FROM attachments WHERE id = ?', [f.id]);
+      await log(tx, t, req.user.id, 'detached', f.filename);
+    });
+    res.status(204).end();
   });
 
   // ---- create -----------------------------------------------------------

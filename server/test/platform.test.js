@@ -76,3 +76,42 @@ test('a site that loaded the sample before gets the platform team added once', a
   const po = await db.get("SELECT id FROM users WHERE email = 'product@taskflow.local'");
   assert.deepEqual((await db.all("SELECT manager_id FROM users WHERE role = 'platform_member'")).map((u) => u.manager_id), [po.id, po.id]);
 });
+
+test('files can be attached to a task, opened and removed', async () => {
+  const po = await signIn('product@taskflow.local');
+  const plat = await signIn('platform1@taskflow.local');
+  const t = (await po.call('POST', '/tasks', { title: 'Complaint with a screenshot', type: 'complaint', assignee_id: plat.user.id })).body;
+  const token = (await (await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'platform1@taskflow.local', password: DEMO_PASSWORD }) })).json()).token;
+  const upload = (name, type, body) =>
+    fetch(`${base}/tasks/${t.id}/attachments?name=${encodeURIComponent(name)}&type=${encodeURIComponent(type)}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/octet-stream' },
+      body,
+    });
+  const bytes = Buffer.from('%PDF-1.4 fake pdf for the test');
+  const up = await upload('شكوى.pdf', 'application/pdf', bytes);
+  assert.equal(up.status, 201);
+  const file = await up.json();
+  assert.equal(file.filename, 'شكوى.pdf');
+
+  const detail = (await po.call('GET', `/tasks/${t.id}`)).body;
+  assert.equal(detail.attachments.length, 1);
+  assert.equal(detail.attachment_count, 1);
+  assert.equal(detail.attachments[0].data, undefined, 'the list has no file contents');
+
+  const got = await fetch(`${base}/tasks/${t.id}/attachments/${file.id}`, { headers: { authorization: `Bearer ${token}` } });
+  assert.equal(got.headers.get('content-type'), 'application/pdf');
+  assert.deepEqual(Buffer.from(await got.arrayBuffer()), bytes);
+
+  // HTML never opens in the browser.
+  const html = await (await upload('x.html', 'text/html', '<script>alert(1)</script>')).json();
+  const h = await fetch(`${base}/tasks/${t.id}/attachments/${html.id}`, { headers: { authorization: `Bearer ${token}` } });
+  assert.equal(h.headers.get('content-type'), 'application/octet-stream');
+  assert.match(h.headers.get('content-disposition'), /^attachment/);
+
+  // Someone who can't see the task can't fetch its files.
+  const ins = await signIn('instructor2@taskflow.local');
+  assert.equal((await ins.call('GET', `/tasks/${t.id}/attachments/${file.id}`)).status, 404);
+  assert.equal((await po.call('DELETE', `/tasks/${t.id}/attachments/${file.id}`)).status, 204);
+  assert.equal((await po.call('GET', `/tasks/${t.id}`)).body.attachments.length, 1);
+});

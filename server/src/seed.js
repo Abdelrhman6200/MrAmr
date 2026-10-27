@@ -479,8 +479,8 @@ async function csLeadSample(prepare, ids, hash) {
   }
   const { task } = sampleHelpers(prepare, ids);
   const sop = (type, done = 0) => SOPS[type].en.steps.map((s, i) => [s.text, i < done, s.required]);
-  await task(null, 'Listen to 5 recorded calls and score them', 'support', 'in_progress', 'medium', 'csl', 'cs', 2, { tags: 'quality' });
-  await task(null, 'Train Youssef on the refund script', 'support', 'todo', 'high', 'csl', 'cs', 4, { tags: 'training' });
+  await task(null, 'Score 5 of Youssef’s calls this week', 'call_quality', 'in_progress', 'medium', 'csl', 'cs', 2, { checklist: sop('call_quality', 1) });
+  await task(null, 'Train Youssef on the refund script', 'training', 'todo', 'high', 'csl', 'cs', 4, { checklist: sop('training') });
   await task(null, 'Student cannot open Lesson 4 on his phone', 'support', 'in_progress', 'high', 'cs3', 'csl', 0, {
     reviewer: 'csl',
     checklist: sop('support', 2),

@@ -128,3 +128,16 @@ test('every role has an SOP, and each team’s managers can change their roles�
   assert.equal((await ops.call('PUT', '/sops/role/cs_member', {})).status, 200);
   assert.equal((await agent.call('GET', '/sops')).body['role:cs_member'], undefined);
 });
+
+test('a kind of work’s SOP is changed by the department that owns it', async () => {
+  const mkt = await signIn('marketing@taskflow.local');
+  const po = await signIn('product@taskflow.local');
+  const ops = await signIn('ops@taskflow.local');
+  const steps = ['!Write the steps', 'Fix it'];
+  assert.equal((await mkt.call('PUT', '/sops/bug', { steps })).status, 403);
+  assert.equal((await mkt.call('PUT', '/sops/social_post', { steps })).status, 200);
+  assert.equal((await po.call('PUT', '/sops/bug', { steps })).status, 200);
+  assert.equal((await po.call('PUT', '/sops/general', { steps })).status, 200, 'general belongs to every manager');
+  assert.equal((await ops.call('PUT', '/sops/content', { steps })).status, 200, 'operations changes any');
+  for (const [who, type] of [[mkt, 'social_post'], [po, 'bug'], [po, 'general'], [ops, 'content']]) await who.call('PUT', `/sops/${type}`, { steps: [] });
+});

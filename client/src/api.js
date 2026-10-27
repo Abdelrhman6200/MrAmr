@@ -77,7 +77,9 @@ async function download(path, fallbackName) {
     const data = await res.json().catch(() => ({}));
     throw new ApiError(res.status, translateMessage(data.error || res.statusText), data.code, data.details);
   }
-  const name = /filename="?([^";]+)"?/.exec(res.headers.get('content-disposition') || '')?.[1] || fallbackName;
+  const disposition = res.headers.get('content-disposition') || '';
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  const name = (encoded && decodeURIComponent(encoded)) || /filename="?([^";]+)"?/.exec(disposition)?.[1] || fallbackName;
   const url = URL.createObjectURL(await res.blob());
   const a = document.createElement('a');
   a.href = url;
@@ -88,8 +90,48 @@ async function download(path, fallbackName) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// Sends a file as the request body; its name and type go in the query string.
+async function upload(path, file) {
+  const token = getToken();
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}${qs({ name: file.name, type: file.type })}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: file,
+    });
+  } catch {
+    throw unreachable();
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = res.status === 413 ? 'That file is too big (4 MB at most)' : data.error || res.statusText;
+    throw new ApiError(res.status, translateMessage(message), data.code, data.details);
+  }
+  return data;
+}
+
+// Opens an authenticated file in a new tab (images and PDFs), or downloads it.
+async function openFile(path, name, mime) {
+  if (!/^image\/(png|jpe?g|gif|webp)$|^application\/pdf$/.test(mime || '')) return download(path, name);
+  // Open the tab now, while the click still counts, then fill it in.
+  const win = window.open('', '_blank');
+  const token = getToken();
+  const res = await fetch(`${API_BASE}${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) {
+    win?.close();
+    throw new ApiError(res.status, translateMessage('File not found'));
+  }
+  const url = URL.createObjectURL(await res.blob());
+  if (win) win.location.href = url;
+  else window.location.href = url;
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
 export const api = {
   download,
+  upload,
+  openFile,
   get: (path, params) => request('GET', path + qs(params), undefined),
   post: (path, body) => request('POST', path, body || {}),
   patch: (path, body) => request('PATCH', path, body),

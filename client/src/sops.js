@@ -64,6 +64,146 @@ const BUILT_IN = {
       done: 'النسخة النهائية المعتمدة في الفولدر الصح.',
     },
   },
+  recording_plan: {
+    en: {
+      when: 'Every week, planning what each course records next week.',
+      target: 'Ready by Thursday for the week starting Saturday.',
+      steps: ['!Check where each course is against the content upload schedule', '!Pick the lessons to record next week, per course', '!Book the instructor, the video editor and the studio for each', 'Make sure every script is approved before its recording day', '!Create the recording and editing tasks with their dates', 'Tell the Product Owner what will be ready for upload'],
+      done: 'Every lesson for next week has a recording day, an instructor, an editor and a task.',
+    },
+    ar: {
+      when: 'كل أسبوع، تخطيط كل كورس هيسجل إيه الأسبوع الجاي.',
+      target: 'جاهزة يوم الخميس للأسبوع اللي بيبدأ السبت.',
+      steps: ['!راجع كل كورس وصل لفين مقارنة بجدول رفع المحتوى', '!حدد الدروس اللي هتتسجل الأسبوع الجاي لكل كورس', '!احجز المدرس والمونتير والاستوديو لكل درس', 'اتأكد إن كل سكريبت متوافق عليه قبل يوم التسجيل', '!اعمل مهام التسجيل والمونتاج بمواعيدها', 'بلّغ مالك المنتج باللي هيبقى جاهز للرفع'],
+      done: 'كل درس الأسبوع الجاي ليه يوم تسجيل ومدرس ومونتير ومهمة.',
+    },
+  },
+  backup: {
+    en: {
+      when: 'The regular backup and maintenance of systems and lesson footage.',
+      target: 'Every week; urgent fixes the same day.',
+      steps: ['!Back up the database and the raw and final lesson files', '!Check the backup opens (restore one file)', 'Check storage space and clean what is no longer needed', 'Install updates on the systems that need them', '!Record what was done and any problem found'],
+      done: 'A tested backup exists for this week and the record is written.',
+    },
+    ar: {
+      when: 'النسخ الاحتياطي والصيانة الدورية للأنظمة وتصوير الدروس.',
+      target: 'كل أسبوع، والتصليح العاجل في نفس اليوم.',
+      steps: ['!خد نسخة احتياطية من قاعدة البيانات وملفات الدروس الخام والنهائية', '!اتأكد إن النسخة بتفتح (رجّع ملف واحد)', 'راجع مساحة التخزين ونضّف اللي مش محتاجينه', 'نزّل التحديثات على الأنظمة اللي محتاجاها', '!سجّل اللي اتعمل وأي مشكلة اتلقت'],
+      done: 'فيه نسخة احتياطية متجربة للأسبوع ده، والتسجيل مكتوب.',
+    },
+  },
+  social_post: {
+    en: {
+      when: 'One post on the company’s pages (Facebook, Instagram, TikTok…).',
+      target: 'Approved a day before it goes out.',
+      steps: ['!Agree the goal of the post and the page', 'Write the text', 'Make the design or pick the photo / video', '!Get the Marketing Manager’s approval', '!Publish or schedule it', 'Reply to comments in the first 24 hours'],
+      done: 'Published on time, with comments answered.',
+    },
+    ar: {
+      when: 'بوست واحد على صفحات الشركة (فيسبوك، إنستجرام، تيك توك…).',
+      target: 'يتوافق عليه قبل نزوله بيوم.',
+      steps: ['!اتفق على هدف البوست والصفحة', 'اكتب الكلام', 'اعمل التصميم أو اختار الصورة / الفيديو', '!خد موافقة مدير التسويق', '!انشره أو جدوله', 'رد على التعليقات في أول 24 ساعة'],
+      done: 'نزل في معاده، والتعليقات اتردّ عليها.',
+    },
+  },
+  paid_ads: {
+    en: {
+      when: 'Running a paid ad on any platform.',
+      target: 'Results checked every 2 days while it runs.',
+      steps: ['!Agree the budget, the audience and the goal (leads, sign-ups)', 'Prepare the ad text and creatives', '!Get the Marketing Manager’s approval', '!Launch with tracking set up', 'Check the numbers every 2 days; stop what does not work', '!Report the cost per lead at the end'],
+      done: 'The ad ran within budget and its results are reported.',
+    },
+    ar: {
+      when: 'إعلان مدفوع على أي منصة.',
+      target: 'النتايج تتراجع كل يومين طول ما هو شغال.',
+      steps: ['!اتفق على الميزانية والجمهور والهدف (عملاء محتملين، تسجيلات)', 'جهّز كلام الإعلان والتصميمات', '!خد موافقة مدير التسويق', '!شغّله ومعاه التتبع متظبط', 'راجع الأرقام كل يومين ووقّف اللي مش جايب نتيجة', '!اعمل تقرير بتكلفة العميل في الآخر'],
+      done: 'الإعلان اشتغل في حدود الميزانية ونتايجه متسجلة.',
+    },
+  },
+  call_quality: {
+    en: {
+      when: 'Reviewing an agent’s calls (team leaders, weekly).',
+      target: '5 calls per agent every week.',
+      steps: ['!Pick 5 of the agent’s calls from this week (different outcomes)', '!Score each: greeting, understanding, solution, tone, closing', 'Write what went well and what to improve', '!Go through it with the agent', 'Plan training for anything repeated'],
+      done: 'Every agent was scored on 5 calls and got their feedback.',
+    },
+    ar: {
+      when: 'مراجعة مكالمات موظف (قادة الفرق، كل أسبوع).',
+      target: '5 مكالمات لكل موظف كل أسبوع.',
+      steps: ['!اختار 5 مكالمات للموظف من الأسبوع ده (نتايج مختلفة)', '!قيّم كل واحدة: الترحيب، الفهم، الحل، الأسلوب، القفل', 'اكتب اللي كان كويس واللي محتاج يتحسن', '!راجع ده مع الموظف', 'خطط تدريب لأي حاجة بتتكرر'],
+      done: 'كل موظف اتقيّم على 5 مكالمات وخد ملاحظاته.',
+    },
+  },
+  training: {
+    en: {
+      when: 'Training a new agent, or training on something new.',
+      target: 'A new agent is ready to take calls in their first week.',
+      steps: ['!Go through the scripts and the role SOP', 'Show the system: calls, outcomes, complaints, support tasks', '!Let them listen to real calls', '!Watch them make calls and give feedback', 'Check what they learned after a week'],
+      done: 'The agent takes calls alone and passed the week-one check.',
+    },
+    ar: {
+      when: 'تدريب موظف جديد، أو تدريب على حاجة جديدة.',
+      target: 'الموظف الجديد يبقى جاهز يرد على المكالمات في أول أسبوع.',
+      steps: ['!راجع معاه السكريبتات وإجراء دوره', 'وريه النظام: المكالمات، والنتايج، والشكاوى، ومهام الدعم', '!خليه يسمع مكالمات حقيقية', '!تابعه وهو بيتصل واديله ملاحظات', 'راجع اتعلم إيه بعد أسبوع'],
+      done: 'الموظف بيرد على المكالمات لوحده وعدّى مراجعة أول أسبوع.',
+    },
+  },
+  staffing: {
+    en: {
+      when: 'Someone joins the company or leaves it.',
+      target: 'Account ready on the first day; access removed on the last day.',
+      steps: ['!Agree the role, the manager and the start or last day', '!Joining: create the account with the right role and manager', 'Joining: give them their role SOP and arrange training', '!Leaving: hand over their open tasks and calls (Team → Cover)', '!Leaving: deactivate the account on the last day', 'Record the contract and paperwork'],
+      done: 'The account matches the person’s status and nothing of theirs is left unowned.',
+    },
+    ar: {
+      when: 'حد بيدخل الشركة أو بيمشي منها.',
+      target: 'الحساب جاهز من أول يوم، والصلاحيات بتتشال آخر يوم.',
+      steps: ['!اتفق على الدور والمدير وأول يوم أو آخر يوم', '!دخول: اعمل الحساب بالدور والمدير الصح', 'دخول: اديله إجراء دوره ورتّب تدريبه', '!خروج: سلّم مهامه ومكالماته المفتوحة (الفريق ← التغطية)', '!خروج: اقفل الحساب آخر يوم', 'سجّل العقد والورق'],
+      done: 'الحساب مطابق لحالة الشخص، ومفيش حاجة من شغله من غير مسؤول.',
+    },
+  },
+  center_setup: {
+    en: {
+      when: 'Opening a new center, or renewing a center’s contract.',
+      target: 'Signed a month before the term starts.',
+      steps: ['!Visit the center: halls, capacity, location, parking', '!Agree the price, the days and the contact person', '!Get the contract signed by the Head of Company', 'Add the center in TaskFlow (Centers) with its capacity and contact', 'Tell the Head of Content so it goes into the schedule'],
+      done: 'The contract is signed and the center is in the system and the schedule.',
+    },
+    ar: {
+      when: 'فتح سنتر جديد، أو تجديد عقد سنتر.',
+      target: 'يتمضي قبل بداية الترم بشهر.',
+      steps: ['!زور السنتر: القاعات، والسعة، والمكان، والركنة', '!اتفق على السعر والأيام والمسؤول', '!خلّي رئيس الشركة يمضي العقد', 'ضيف السنتر على TaskFlow (المراكز) بسعته والمسؤول', 'بلّغ رئيس قسم المحتوى عشان يدخل في الجدول'],
+      done: 'العقد اتمضى، والسنتر على النظام وفي الجدول.',
+    },
+  },
+  leadership_meeting: {
+    en: {
+      when: 'The weekly meeting of the Head of Company with the department heads.',
+      target: 'Every week; decisions written the same day.',
+      steps: ['!Each head brings their numbers (from Reports)', 'Go through what is late or blocked, team by team', '!Decide, and give each decision an owner and a date', '!Create a task for each decision', 'Share the summary with the heads'],
+      done: 'Every decision is a task with an owner and a due date.',
+    },
+    ar: {
+      when: 'الاجتماع الأسبوعي لرئيس الشركة مع رؤساء الأقسام.',
+      target: 'كل أسبوع، والقرارات تتكتب في نفس اليوم.',
+      steps: ['!كل رئيس قسم يجيب أرقامه (من التقارير)', 'راجعوا المتأخر والمتوقف فريق فريق', '!قرروا، وكل قرار ليه مسؤول ومعاد', '!اعمل مهمة لكل قرار', 'ابعت الملخص لرؤساء الأقسام'],
+      done: 'كل قرار بقى مهمة ليها مسؤول ومعاد.',
+    },
+  },
+  exam_halls: {
+    en: {
+      when: 'Running the halls on an exam day at a center.',
+      target: 'Halls ready an hour before the exam.',
+      steps: ['!Get the papers, the attendance sheets and the seating plan', '!Prepare the halls and the seats', '!Give each proctor their section', 'Handle late students and problems during the exam', '!Collect the papers from every section and count them against attendance', '!Hand the papers to the graders'],
+      done: 'Every section’s papers are counted against attendance and with the graders.',
+    },
+    ar: {
+      when: 'إدارة القاعات يوم الامتحان في السنتر.',
+      target: 'القاعات جاهزة قبل الامتحان بساعة.',
+      steps: ['!استلم الورق وكشوف الحضور وتوزيع الأماكن', '!جهّز القاعات والأماكن', '!وزّع على كل مراقب القسم بتاعه', 'اتعامل مع المتأخرين وأي مشكلة أثناء الامتحان', '!اجمع ورق كل الأقسام وعدّه على الحضور', '!سلّم الورق للمصححين'],
+      done: 'ورق كل قسم متعدّ على الحضور ومع المصححين.',
+    },
+  },
   content_review: {
     en: {
       when: 'A lesson or material is waiting for quality review.',
@@ -428,12 +568,14 @@ export function typesFor(taskTypes, department) {
   return taskTypes.filter((x) => x.group !== 'academic');
 }
 
-// Managers change the SOPs of the types their department works with;
-// leadership changes any.
+// Managers change the SOPs of their department's types (a type's `owner`; one
+// without an owner, any manager); leadership and operations change any.
 export function canEditSop(roles, role, taskTypes, type) {
   const r = roles[role];
   if (!r || r.level === 'member') return false;
-  return typesFor(taskTypes, r.department).some((x) => x.key === type);
+  if (r.department === 'executive' || r.department === 'operations') return true;
+  const t = taskTypes.find((x) => x.key === type);
+  return !!t && (!t.owner || t.owner === r.department);
 }
 
 // A type's SOP: the custom version if a manager set one, else the built-in one in `lang`.
