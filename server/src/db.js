@@ -352,10 +352,8 @@ CREATE TABLE IF NOT EXISTS marks (
 );
 CREATE INDEX IF NOT EXISTS idx_marks_student ON marks(student_id);
 
--- People's mobile numbers. WhatsApp notifications were removed: drop their columns
+-- People's mobile numbers
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
-ALTER TABLE users DROP COLUMN IF EXISTS whatsapp_notifications;
-ALTER TABLE notifications DROP COLUMN IF EXISTS whatsapped;
 
 -- The weekly summary each manager gets (one per manager per week).
 CREATE TABLE IF NOT EXISTS weekly_digests (
@@ -570,7 +568,9 @@ async function createPostgres(url) {
     for (let attempt = 0; ; attempt++) {
       const client = await pool.connect();
       try {
-        await client.query('BEGIN');
+        // A transaction left open (e.g. its serverless instance was frozen mid-way)
+        // is ended by the database instead of holding its locks for good.
+        await client.query("BEGIN; SET LOCAL idle_in_transaction_session_timeout = '30s'");
         return client;
       } catch (err) {
         client.release(err); // destroys it
@@ -656,9 +656,31 @@ async function ensureSchema(db) {
     .get("SELECT value FROM app_state WHERE key = 'schema'")
     .catch(() => null); // table doesn't exist yet
   if (current && Number(current.value) >= SCHEMA_VERSION) return;
+  // Changing a table waits for every transaction using it. End those stuck for
+  // over a minute so the update can't wait forever: transactions left open (an
+  // instance frozen mid-way) and earlier attempts at this update still waiting
+  // for a lock (their instance timed out; this version gives up after 15 s).
+  if (db.kind === 'postgres') {
+    await db
+      .run(
+        `SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+         WHERE datname = current_database() AND pid <> pg_backend_pid() AND state_change < now() - interval '1 minute'
+           AND (state LIKE 'idle in transaction%'
+             OR (state = 'active' AND wait_event_type = 'Lock' AND (query LIKE 'ALTER TABLE%' OR query LIKE '%pg_advisory_xact_lock(4242)%')))`,
+      )
+      .catch((err) => console.warn('Could not end stale transactions:', err.message));
+  }
   await db.tx(async (tx) => {
+    // Rather fail (the next request tries again) than wait on a lock for good.
+    if (db.kind === 'postgres') await tx.run("SET LOCAL lock_timeout = '15s'");
     // Serialise first-time setup when several instances start at once.
     await tx.run('SELECT pg_advisory_xact_lock(4242)');
+    // Another instance may have finished it while this one waited.
+    // (A failed query would abort this transaction, so check the table exists first.)
+    if ((await tx.get("SELECT to_regclass('app_state') AS t")).t) {
+      const done = await tx.get("SELECT value FROM app_state WHERE key = 'schema'");
+      if (done && Number(done.value) >= SCHEMA_VERSION) return;
+    }
     // Statements end with ';' at the end of a line (comments must not contain one).
     for (const statement of SCHEMA.split(/;\s*$/m).map((s) => s.trim()).filter(Boolean)) await tx.run(statement);
     await tx.run(
