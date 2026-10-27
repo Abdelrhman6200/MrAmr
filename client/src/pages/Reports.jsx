@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { DeptTag, Progress, Spinner } from '../components/ui.jsx';
@@ -53,7 +53,103 @@ function Trend({ weeks }) {
   );
 }
 
+function ReportTabs() {
+  const { t } = useApp();
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'people' ? 'people' : 'overview';
+  return (
+    <div className="seg">
+      <button className={tab === 'overview' ? 'active' : ''} onClick={() => setParams({})}>
+        {t('rep.overview')}
+      </button>
+      <button className={tab === 'people' ? 'active' : ''} onClick={() => setParams({ tab: 'people' })}>
+        {t('rep.people')}
+      </button>
+    </div>
+  );
+}
+
 export default function Reports() {
+  const [params] = useSearchParams();
+  return params.get('tab') === 'people' ? <People /> : <Overview />;
+}
+
+const pctClass = (n) => (n == null ? '' : n >= 80 ? 'good' : n >= 50 ? 'ok' : 'bad');
+
+// Performance per person over the last N days.
+function People() {
+  const { t, roleLabel, version } = useApp();
+  const [days, setDays] = useState(30);
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    api.get('/dashboard/kpis', { days }).then(setData).catch(() => setData({ people: [] }));
+  }, [days, version]);
+  const hasCalls = data?.people.some((p) => p.calls);
+  const hasComplaints = data?.people.some((p) => p.complaints_closed);
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>{t('rep.title')}</h1>
+          <p className="muted">{t('rep.peopleIntro')}</p>
+        </div>
+        <div className="row gap">
+          <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+            {[7, 30, 90].map((d) => (
+              <option key={d} value={d}>
+                {t('rep.lastDays', { n: d })}
+              </option>
+            ))}
+          </select>
+          <ReportTabs />
+        </div>
+      </div>
+      {!data ? (
+        <Spinner />
+      ) : (
+        <section className="panel flush">
+          <div className="table-wrap">
+            <table className="table kpis">
+              <thead>
+                <tr>
+                  <th>{t('rep.person')}</th>
+                  <th>{t('rep.done')}</th>
+                  <th>{t('rep.onTime')}</th>
+                  <th>{t('rep.avgDays')}</th>
+                  <th>{t('rep.openNow')}</th>
+                  <th>{t('rep.lateNow')}</th>
+                  {hasCalls && <th>{t('rep.reach')}</th>}
+                  {hasComplaints && <th>{t('rep.complaintHours')}</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {data.people.map((p) => (
+                  <tr key={p.id}>
+                    <td>
+                      <Link to={`/tasks?assignee_id=${p.id}`} className="cell-title">
+                        {p.name}
+                      </Link>
+                      <div className="muted sm">{roleLabel(p.role)}</div>
+                    </td>
+                    <td>{p.done}</td>
+                    <td className={`kpi ${pctClass(p.on_time_pct)}`}>{p.on_time_pct != null ? `${p.on_time_pct}%` : '—'}</td>
+                    <td>{p.avg_days ?? '—'}</td>
+                    <td>{p.open}</td>
+                    <td className={p.overdue ? 'kpi bad' : ''}>{p.overdue}</td>
+                    {hasCalls && <td className={`kpi ${pctClass(p.reach_pct)}`}>{p.calls ? `${p.reach_pct}% (${p.calls})` : '—'}</td>}
+                    {hasComplaints && <td>{p.complaint_hours != null ? t('rep.hoursN', { n: p.complaint_hours }) : '—'}</td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function Overview() {
   const { meta, version, t, statusLabel, priorityLabel, typeLabel } = useApp();
   const [data, setData] = useState(null);
   useEffect(() => {
@@ -71,6 +167,7 @@ export default function Reports() {
           <h1>{t('rep.title')}</h1>
           <p className="muted">{t('rep.basis', { n: data.total })}</p>
         </div>
+        <ReportTabs />
       </div>
       <div className="stats">
         <div className="stat">

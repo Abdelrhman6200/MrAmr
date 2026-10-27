@@ -65,6 +65,7 @@ async function init() {
     corsOrigins: corsOrigins(),
     cronSecret: process.env.CRON_SECRET,
     autoSample: process.env.SAMPLE_DATA !== '0',
+    digests: true,
   });
 }
 

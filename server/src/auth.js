@@ -66,5 +66,5 @@ export function requireAuth(db, secret) {
 export function publicUser(u) {
   if (!u) return null;
   const { password_hash, session_version, ...rest } = u;
-  return { ...rest, active: !!rest.active, email_notifications: rest.email_notifications !== 0 };
+  return { ...rest, active: !!rest.active, email_notifications: rest.email_notifications !== 0, whatsapp_notifications: rest.whatsapp_notifications !== 0 };
 }

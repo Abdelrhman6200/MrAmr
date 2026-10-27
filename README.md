@@ -74,7 +74,15 @@ This is only the demo setup. The real hierarchy is data: the Head of Company or 
 - **Team**: a collapsible org chart and a by-department directory.
 - **Reports**: completion by department, status and priority breakdowns, weekly created-vs-completed throughput, and project health.
 - **Notifications**: you're notified when you're assigned a task, when your review is requested, when work is approved or sent back for changes, when someone comments, and when work is completed or blocked.
-- Works on phones (collapsible sidebar) and supports dark mode.
+- **SOPs**: every kind of work and every role has a standard procedure (English and Arabic). A new task starts with its type's steps as its checklist; *required* steps must be ticked before it goes to review or is done. Each department's managers change their own SOPs; the SOPs page shows 90-day usage and on-time rates, and prints.
+- **Files**: attach files to any task (up to 20 of 4 MB each, kept in the database).
+- **Recurring tasks**: daily, weekly or monthly work becomes a task of its own each time, with its SOP. Assistants' weekly duties are created every Saturday.
+- **Grades**: students (imported from a sheet), homework, exams and quizzes, and each student's marks and report. Scanning the barcode on a student's book jumps to their mark.
+- **Online platform**: the Product Owner's content upload schedule (a content plan becomes dated upload tasks), exams, forums, complaints, bugs and features.
+- **Deputies, leave and shifts**: a manager's deputy acts for them between two dates; leave requests are approved by the manager (and set up the deputy); weekly shifts with who is on today; hand an absent person's open tasks and calls to a colleague in one go.
+- **Performance**: per-person numbers (done, on time, average days, late now, calls reached, complaint time) under Reports → People, and a weekly summary to every manager on Saturday.
+- **WhatsApp notifications** (optional, see Configuration) and an **audit log** of changes to people, access, SOPs, deputies, leave and shifts.
+- Works on phones (collapsible sidebar; installable as an app, and opens offline) and supports dark mode.
 
 ## Access rules
 
@@ -125,7 +133,9 @@ On Vercel nothing is required except a connected database (see below). Everythin
 | `DEMO_DATA` | optional | `1` loads the demo company into an empty database on Vercel (locally the demo loads by default). |
 | `APP_URL` | optional | public address used for links in emails. On Vercel it defaults to the production domain. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `MAIL_FROM` | optional | an email account to send from. Without `SMTP_HOST` the app works but sends no email. |
-| `CRON_SECRET` | optional | protects the daily email retry job (`/api/cron/emails`); Vercel Cron sends it automatically. |
+| `CRON_SECRET` | optional | protects the daily job (`/api/cron/emails`): recurring tasks, the managers' weekly summaries, and email and WhatsApp retries. Vercel Cron sends it automatically. |
+| `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID` | optional | a WhatsApp Business Cloud API access token and the sending number's ID (from Meta for Developers → WhatsApp → API setup). With both set, notifications also go out on WhatsApp to people who added their mobile number in their profile. |
+| `WHATSAPP_TEMPLATE`, `WHATSAPP_TEMPLATE_LANG` | optional | the name of an approved message template with one body variable (`{{1}}`, which receives the notification), and its language (default `ar`). WhatsApp only delivers plain messages to people who wrote to the business in the last 24 hours, so set a template for reliable delivery. |
 | `DATABASE_CA` | optional | the database's CA certificate, to verify its TLS certificate. Connections are always encrypted. |
 | `CORS_ORIGIN` | optional | only if the web app is hosted on a different address from the API. |
 | `PORT`, `TRUST_PROXY` | local server | port (default `3001`); set `TRUST_PROXY=1` behind nginx/Caddy. |

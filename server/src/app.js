@@ -17,20 +17,35 @@ import adminRoutes from './routes/admin.js';
 import sopRoutes from './routes/sops.js';
 import delegationRoutes from './routes/delegations.js';
 import recurringRoutes from './routes/recurring.js';
+import gradeRoutes from './routes/grades.js';
+import { leaveRoutes, shiftRoutes } from './routes/people.js';
 import { cors, securityHeaders } from './security.js';
 import { createMailer, emailDispatcher } from './mail.js';
 import { background } from './background.js';
 import { autoLoadSample, readStatus } from './seed.js';
 import { ensureRecurring, ensureWeeklyDuties } from './weekly.js';
 import { localDate } from './time.js';
+import { createWhatsApp, dispatchWhatsApp } from './whatsapp.js';
+import { sendWeeklyDigests } from './digest.js';
 
-export function createApp({ db, secret, staticDir, mailer = createMailer({}), appUrl = null, corsOrigins = [], cronSecret = null, autoSample = false }) {
+// digests: send the managers' weekly summaries (off in tests).
+export function createApp({ db, secret, staticDir, mailer = createMailer({}), whatsapp = createWhatsApp(), appUrl = null, corsOrigins = [], cronSecret = null, autoSample = false, digests = false }) {
   const app = express();
   const access = makeAccess(db);
   // appUrl (APP_URL) is the public address used in emailed links; never derived from request headers.
-  const ctx = { db, secret, access, mailer, autoSample, appUrl: appUrl ? appUrl.replace(/\/+$/, '') : null };
+  const ctx = { db, secret, access, mailer, whatsapp, autoSample, appUrl: appUrl ? appUrl.replace(/\/+$/, '') : null };
   const dispatchEmails = emailDispatcher(db, mailer, ctx.appUrl);
   app.locals.dispatchEmails = dispatchEmails;
+  const dispatchWa = () => dispatchWhatsApp(db, whatsapp, ctx.appUrl).catch((err) => console.error('WhatsApp dispatch failed:', err.message));
+  app.locals.dispatchWa = dispatchWa;
+
+  // Changes can create notifications; send them on WhatsApp once the response is on its way.
+  if (whatsapp.enabled) {
+    app.use('/api', (req, res, next) => {
+      if (req.method !== 'GET') res.on('finish', () => res.statusCode < 400 && background('WhatsApp notifications', dispatchWa));
+      next();
+    });
+  }
 
   // Behind a reverse proxy (nginx, a load balancer) set TRUST_PROXY=1 so login throttling sees real client IPs.
   if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
@@ -74,14 +89,16 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
   });
   api.get('/meta', async (_req, res) => {
     const state = await appState();
-    res.json({ departments: DEPARTMENTS, roles: ROLES, statuses: STATUSES, priorities: PRIORITIES, taskTypes: TASK_TYPES, tracks: TRACKS, projectStatuses: PROJECT_STATUSES, userAdminRoles: USER_ADMIN_ROLES, callStatuses: CALL_STATUSES, centerAdminRoles: CENTER_ADMIN_ROLES, weekdays: WEEKDAYS, emailEnabled: mailer.enabled, resetByEmail: mailer.enabled && !!ctx.appUrl, demo: state.demo, needsSetup: state.needs_setup, sampleData: state.sample_data });
+    res.json({ departments: DEPARTMENTS, roles: ROLES, statuses: STATUSES, priorities: PRIORITIES, taskTypes: TASK_TYPES, tracks: TRACKS, projectStatuses: PROJECT_STATUSES, userAdminRoles: USER_ADMIN_ROLES, callStatuses: CALL_STATUSES, centerAdminRoles: CENTER_ADMIN_ROLES, weekdays: WEEKDAYS, emailEnabled: mailer.enabled, whatsappEnabled: whatsapp.enabled, resetByEmail: mailer.enabled && !!ctx.appUrl, demo: state.demo, needsSetup: state.needs_setup, sampleData: state.sample_data });
   });
   // Scheduled sweep (Vercel Cron) that retries any notification emails left behind.
   api.get('/cron/emails', async (req, res) => {
     if (!cronSecret || req.get('authorization') !== `Bearer ${cronSecret}`) throw new HttpError(401, 'Not authenticated');
     await ensureWeeklyDuties(db);
     await ensureRecurring(db);
+    if (digests) await sendWeeklyDigests(db, localDate());
     await dispatchEmails();
+    await dispatchWa();
     res.json({ ok: true });
   });
   api.use('/auth', authRoutes(ctx));
@@ -109,6 +126,12 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
     } catch (err) {
       console.error('Creating recurring work failed:', err);
     }
+    // The managers' weekly summaries don't hold up this request.
+    if (digests) {
+      background('Weekly summaries', async () => {
+        if (await sendWeeklyDigests(db, localDate())) await Promise.all([dispatchEmails(), dispatchWa()]);
+      });
+    }
     next();
   });
   api.use('/users', userRoutes(ctx));
@@ -135,6 +158,9 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
   api.use('/sops', sopRoutes(ctx));
   api.use('/delegations', delegationRoutes(ctx));
   api.use('/recurring', recurringRoutes(ctx));
+  api.use('/grades', gradeRoutes(ctx));
+  api.use('/leave', leaveRoutes(ctx));
+  api.use('/shifts', shiftRoutes(ctx));
   api.use((_req, _res, next) => next(new HttpError(404, 'Unknown API route')));
   app.use('/api', api);
 

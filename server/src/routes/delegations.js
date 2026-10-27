@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { badRequest, forbidden, idParam, notFound, optionalId } from '../http.js';
 import { CALL_STATUSES, isManagerRole } from '../meta.js';
 import { localDate, nowUtc } from '../time.js';
+import { audit } from '../audit.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_DAYS = 120;
@@ -70,6 +71,7 @@ export default function delegationRoutes({ db, access }) {
         `You will act for ${person.name} from ${starts} to ${ends}`,
         JSON.stringify({ name: person.name, from: starts, to: ends }),
       ]);
+      await audit(tx, req.user, 'created', 'deputy', d.id, { for: person.name, deputy: deputy.name, from: starts, to: ends });
       await access.invalidate(tx);
       return d;
     });
@@ -82,6 +84,7 @@ export default function delegationRoutes({ db, access }) {
     if (!canArrange(req.user, d.user_id) && d.created_by !== req.user.id) throw forbidden();
     await db.tx(async (tx) => {
       await tx.run('DELETE FROM delegations WHERE id = ?', [d.id]);
+      await audit(tx, req.user, 'deleted', 'deputy', d.id, { from: d.starts_on, to: d.ends_on });
       await access.invalidate(tx);
     });
     res.status(204).end();
@@ -122,6 +125,7 @@ export default function delegationRoutes({ db, access }) {
           JSON.stringify({ actor: req.user.name, from: from.name, tasks: tasks.length, calls }),
         ]);
       }
+      await audit(tx, req.user, 'handover', 'user', fromId, { from: from.name, to: to.name, tasks: tasks.length, calls });
       return { tasks: tasks.length, calls };
     });
     res.json(moved);

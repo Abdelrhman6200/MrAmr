@@ -4,6 +4,7 @@ import { createResetToken, setPassword } from '../passwords.js';
 import { hashPassword, publicUser } from '../auth.js';
 import { badRequest, forbidden, idParam, notFound, oneOf, optionalId, requiredString } from '../http.js';
 import { ROLES, departmentOf } from '../meta.js';
+import { audit } from '../audit.js';
 
 const AVATAR_COLORS = ['#6366f1', '#0ea5e9', '#14b8a6', '#22c55e', '#eab308', '#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#64748b'];
 const INSERT_USER =
@@ -58,6 +59,7 @@ export default function userRoutes({ db, access }) {
     const color = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
     const user = await db.tx(async (tx) => {
       const { id } = await tx.get(INSERT_USER, [name, email, hashPassword(b.password), role, b.title?.trim() || ROLES[role].label, managerId, color]);
+      await audit(tx, req.user, 'created', 'user', id, { name, email, role, manager_id: managerId });
       await access.invalidate(tx);
       return byId(id, tx);
     });
@@ -143,6 +145,11 @@ export default function userRoutes({ db, access }) {
     if (b.title !== undefined) fields.title = String(b.title || '').trim();
     if (b.language !== undefined) fields.language = oneOf(b.language, ['en', 'ar'], 'language');
     if (b.email_notifications !== undefined) fields.email_notifications = b.email_notifications ? 1 : 0;
+    if (b.whatsapp_notifications !== undefined) fields.whatsapp_notifications = b.whatsapp_notifications ? 1 : 0;
+    if (b.phone !== undefined) {
+      fields.phone = String(b.phone || '').trim().slice(0, 30);
+      if (fields.phone && !/^\+?[\d\s()-]{8,}$/.test(fields.phone)) throw badRequest('Enter a valid phone number');
+    }
     if (admin) {
       if (b.email !== undefined) {
         const email = requiredString(b.email, 'email', 200).toLowerCase();
@@ -171,6 +178,15 @@ export default function userRoutes({ db, access }) {
       }
       // Same path as a reset: signs them out everywhere and cancels outstanding reset links.
       if (admin && b.password !== undefined) await setPassword(tx, target.id, b.password);
+      // Changes to someone's access are kept in the audit log.
+      const changed = ['email', 'role', 'manager_id', 'active'].filter((k) => k in fields && fields[k] !== target[k]);
+      if (changed.length || (admin && b.password !== undefined)) {
+        await audit(tx, req.user, 'updated', 'user', target.id, {
+          name: target.name,
+          ...Object.fromEntries(changed.map((k) => [k, [target[k], fields[k]]])),
+          ...(admin && b.password !== undefined ? { password: 'reset' } : {}),
+        });
+      }
       await access.invalidate(tx);
       return byId(target.id, tx);
     });

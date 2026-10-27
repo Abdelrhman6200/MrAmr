@@ -17,6 +17,8 @@ import Settings from './pages/Settings.jsx';
 import Sops from './pages/Sops.jsx';
 import Platform from './pages/Platform.jsx';
 import Recurring from './pages/Recurring.jsx';
+import Grades from './pages/Grades.jsx';
+import Audit from './pages/Audit.jsx';
 import Calls from './pages/Calls.jsx';
 import Centers from './pages/Centers.jsx';
 import { Spinner } from './components/ui.jsx';
@@ -51,6 +53,8 @@ function Routed() {
         <Route path="/sops" element={<Sops />} />
         <Route path="/platform" element={<Platform />} />
         <Route path="/recurring" element={<Recurring />} />
+        <Route path="/grades" element={<Grades />} />
+        <Route path="/audit" element={<Audit />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

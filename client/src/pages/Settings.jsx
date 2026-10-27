@@ -3,6 +3,42 @@ import { api, setToken } from '../api.js';
 import { useApp } from '../context.jsx';
 import { Avatar, DeptTag } from '../components/ui.jsx';
 import { LanguageSwitch } from '../components/Layout.jsx';
+import { MyLeave } from './Leave.jsx';
+
+// Phone number for WhatsApp notifications.
+function WhatsAppSettings() {
+  const { user, setUser, meta, notify, t } = useApp();
+  const [phone, setPhone] = useState(user.phone || '');
+  const save = async (patch) => {
+    try {
+      const u = await api.patch(`/users/${user.id}`, patch);
+      setUser({ ...user, ...u });
+      notify(t('settings.updated'), 'success');
+    } catch (err) {
+      notify(err.message, 'error');
+    }
+  };
+  return (
+    <section className="panel">
+      <h2>{t('wa.title')}</h2>
+      <p className="muted">{t('wa.hint')}</p>
+      <form
+        className="row gap wrap"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save({ phone });
+        }}
+      >
+        <input type="tel" dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01xxxxxxxxx" />
+        <button className="btn">{t('common.save')}</button>
+      </form>
+      <label className="check">
+        <input type="checkbox" checked={user.whatsapp_notifications !== false} onChange={(e) => save({ whatsapp_notifications: e.target.checked })} /> {t('wa.on')}
+      </label>
+      {!meta.whatsappEnabled && <p className="muted sm">{t('wa.off')}</p>}
+    </section>
+  );
+}
 
 export default function Settings() {
   const { user, setUser, roleLabel, deptOf, userById, notify, refresh, t, meta } = useApp();
@@ -96,6 +132,8 @@ export default function Settings() {
         </label>
         {!meta.emailEnabled && <p className="muted sm">{t('settings.emailOff')}</p>}
       </section>
+      <WhatsAppSettings />
+      <MyLeave />
       <section className="panel">
         <h2>{t('settings.changePassword')}</h2>
         <form className="form" onSubmit={changePassword}>

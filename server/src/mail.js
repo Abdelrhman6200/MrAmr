@@ -56,7 +56,7 @@ export function notificationText(lang, n) {
   return text === key ? n.message : text;
 }
 
-const linkFor = (appUrl, n) => (!appUrl ? null : n.link ? `${appUrl}${n.link}` : n.task_id ? `${appUrl}/?task=${n.task_id}` : appUrl);
+export const linkFor = (appUrl, n) => (!appUrl ? null : n.link ? `${appUrl}${n.link}` : n.task_id ? `${appUrl}/?task=${n.task_id}` : appUrl);
 
 // Per-user retry back-off after a failed send: 1, 2, 4 … minutes, capped at 30.
 const backoff = new Map();

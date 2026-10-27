@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { TASK_SELECT, PRIORITY_ORDER } from './tasks.js';
 import { DEPARTMENTS, ROLES } from '../meta.js';
+import { peopleKpis } from '../kpis.js';
 import { DAY, localDate, utcAgo } from '../time.js';
 
 export default function dashboardRoutes({ db, access }) {
@@ -127,6 +128,14 @@ export default function dashboardRoutes({ db, access }) {
       weeks,
       projects,
     });
+  });
+
+  // Performance per person: the user's team (everyone for leadership).
+  r.get('/kpis', async (req, res) => {
+    const days = Math.min(Math.max(Math.floor(Number(req.query.days)) || 30, 7), 365);
+    const me = req.user;
+    const ids = me.role === 'ceo' || access.canAdminUsers(me) ? (await db.all('SELECT id FROM users WHERE active = 1')).map((u) => u.id) : [me.id, ...access.reportsOf(me.id)];
+    res.json({ days, people: await peopleKpis(db, ids, days) });
   });
 
   return r;

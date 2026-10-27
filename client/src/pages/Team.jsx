@@ -4,6 +4,7 @@ import { useApp } from '../context.jsx';
 import { Avatar, DeptTag } from '../components/ui.jsx';
 import Icon from '../components/Icon.jsx';
 import Cover from './Cover.jsx';
+import { Shifts, TeamLeave } from './Leave.jsx';
 
 function Node({ user, childrenOf, depth = 0 }) {
   const { roleLabel, deptOf, user: me, t } = useApp();
@@ -75,10 +76,20 @@ export default function Team() {
           <button className={mode === 'cover' ? 'active' : ''} onClick={() => setMode('cover')}>
             {t('cover.tab')}
           </button>
+          <button className={mode === 'leave' ? 'active' : ''} onClick={() => setMode('leave')}>
+            {t('leave.tab')}
+          </button>
+          <button className={mode === 'shifts' ? 'active' : ''} onClick={() => setMode('shifts')}>
+            {t('shifts.tab')}
+          </button>
         </div>
       </div>
       {mode === 'cover' ? (
         <Cover />
+      ) : mode === 'leave' ? (
+        <TeamLeave />
+      ) : mode === 'shifts' ? (
+        <Shifts />
       ) : mode === 'chart' ? (
         <ul className="org panel">
           {roots.map((r) => (

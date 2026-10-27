@@ -7,6 +7,7 @@ import TaskDetail from './TaskDetail.jsx';
 import TaskForm from './TaskForm.jsx';
 import Icon from './Icon.jsx';
 import { canSeePlatform } from '../pages/Platform.jsx';
+import { canSeeGrades } from '../pages/Grades.jsx';
 
 const NAV = [
   { to: '/', key: 'nav.dashboard', icon: 'dashboard', end: true },
@@ -18,6 +19,7 @@ const NAV = [
   { to: '/team', key: 'nav.team', icon: 'team' },
   { to: '/reports', key: 'nav.reports', icon: 'reports' },
   { to: '/platform', key: 'nav.platform', icon: 'upload', platform: true },
+  { to: '/grades', key: 'nav.grades', icon: 'note', grades: true },
   { to: '/sops', key: 'sop.title', icon: 'checklist' },
 ];
 
@@ -168,7 +170,7 @@ export default function Layout({ children }) {
           {t('nav.newTask')}
         </button>
         <nav>
-          {NAV.filter((n) => (!n.calls || canUseCalls) && (!n.platform || canSeePlatform(meta, user))).map((n) => (
+          {NAV.filter((n) => (!n.calls || canUseCalls) && (!n.platform || canSeePlatform(meta, user)) && (!n.grades || canSeeGrades(meta, user))).map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className="nav-link">
               <Icon name={n.icon} />
               {t(n.key)}
@@ -180,6 +182,10 @@ export default function Layout({ children }) {
               <NavLink to="/users" className="nav-link">
                 <Icon name="users" />
                 {t('nav.users')}
+              </NavLink>
+              <NavLink to="/audit" className="nav-link">
+                <Icon name="note" />
+                {t('audit.title')}
               </NavLink>
             </>
           )}

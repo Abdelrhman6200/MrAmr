@@ -3072,3 +3072,89 @@ html[lang='ar'] .auth-pitch h1 {
   align-items: center;
   font-weight: 600;
 }
+
+/* Grades */
+.grades-new {
+  margin-bottom: 14px;
+}
+.mark-entry h2 {
+  margin: 8px 0 2px;
+}
+.mark-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+.mark-stats span {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+.scan {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  background: var(--accent-soft);
+}
+.scan input {
+  flex: 1;
+  border: 0;
+  background: none;
+  font-size: 15px;
+  outline: none;
+}
+.mark-input {
+  width: 90px;
+  font-size: 15px;
+  text-align: center;
+}
+.table.marks tr.saved td:first-child {
+  font-weight: 600;
+}
+.saved-tick {
+  color: var(--accent);
+  margin-inline-start: 6px;
+  vertical-align: middle;
+}
+
+/* Reports → People, leave and shifts */
+.kpi.good {
+  color: var(--accent);
+  font-weight: 600;
+}
+.kpi.ok {
+  color: var(--warn);
+  font-weight: 600;
+}
+.kpi.bad {
+  color: var(--danger, #dc2626);
+  font-weight: 600;
+}
+.person-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+.table.shifts th.today,
+.table.shifts td.today {
+  background: var(--accent-soft);
+}
+.nowrap {
+  white-space: nowrap;
+}
+.scan input,
+.scan input:focus {
+  border: 0;
+  box-shadow: none;
+  padding: 4px 0;
+}

@@ -20,7 +20,25 @@ const BACKUP_TABLES = [
   'availability_rounds',
   'availability',
   'center_assignments',
+  'sops',
+  'delegations',
+  'recurring_tasks',
+  'students',
+  'assessments',
+  'marks',
+  'leave_requests',
+  'shifts',
+  'audit_log',
 ];
+// Not in the backup: attachments (files can be large; download them from their tasks).
+
+const safeJson = (s) => {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return s;
+  }
+};
 
 export default function adminRoutes({ db }) {
   const r = Router();
@@ -37,6 +55,17 @@ export default function adminRoutes({ db }) {
     const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
     res.setHeader('content-disposition', `attachment; filename="taskflow-backup-${stamp}.json"`);
     res.json({ app: 'taskflow', version: 1, created_at: new Date().toISOString(), tables });
+  });
+
+  // Who changed what, newest first.
+  r.get('/audit', async (req, res) => {
+    const before = Number(req.query.before) || null;
+    const rows = await db.all(
+      `SELECT a.*, u.name AS user_name FROM audit_log a LEFT JOIN users u ON u.id = a.user_id
+       WHERE (?::int IS NULL OR a.id < ?) ORDER BY a.id DESC LIMIT 100`,
+      [before, before],
+    );
+    res.json(rows.map((r) => ({ ...r, detail: safeJson(r.detail) })));
   });
 
   // Sample team, projects, tasks, calls and centers for trying the app out.

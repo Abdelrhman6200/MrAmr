@@ -7,6 +7,7 @@ import { ROLES, TASK_TYPES, USER_ADMIN_ROLES, isRole, keys } from '../meta.js';
 import { canEditSop, normaliseSop, sopFor } from '../../../client/src/sops.js';
 import { canEditRoleSop, normaliseRoleSop } from '../../../client/src/roleSops.js';
 import { localDate, nowUtc } from '../time.js';
+import { audit } from '../audit.js';
 
 const text = (value, max) => String(value || '').trim().slice(0, max);
 
@@ -23,14 +24,19 @@ export async function customSops(q) {
   );
 }
 
-// Saves (or, with nothing in it, removes) a custom SOP under `key`.
-async function store(db, key, value, empty, userId) {
-  if (empty) return db.run('DELETE FROM sops WHERE type = ?', [key]);
-  return db.run(
-    `INSERT INTO sops (type, steps, updated_by, updated_at) VALUES (?, ?, ?, ?)
-     ON CONFLICT (type) DO UPDATE SET steps = EXCLUDED.steps, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at, version = sops.version + 1`,
-    [key, JSON.stringify(value), userId, nowUtc()],
-  );
+// Saves (or, with nothing in it, removes) a custom SOP under `key`, and logs it.
+async function store(db, key, value, empty, user) {
+  await db.tx(async (tx) => {
+    if (empty) await tx.run('DELETE FROM sops WHERE type = ?', [key]);
+    else {
+      await tx.run(
+        `INSERT INTO sops (type, steps, updated_by, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT (type) DO UPDATE SET steps = EXCLUDED.steps, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at, version = sops.version + 1`,
+        [key, JSON.stringify(value), user.id, nowUtc()],
+      );
+    }
+    await audit(tx, user, empty ? 'restored' : 'updated', 'sop', null, { sop: key });
+  });
 }
 
 // The steps ({ text, required }) a new task of `type` starts with, in `lang` unless a manager wrote them.
@@ -73,7 +79,7 @@ export default function sopRoutes({ db, access }) {
       done: text(b.done, 500),
       steps: b.steps.slice(0, 50).map((s) => (typeof s === 'string' ? text(s, 500) : { text: text(s?.text, 500), required: !!s?.required })),
     });
-    await store(db, type, sop, !sop.steps.length, req.user.id);
+    await store(db, type, sop, !sop.steps.length, req.user);
     res.json(await customSops(db));
   });
 
@@ -83,7 +89,7 @@ export default function sopRoutes({ db, access }) {
     if (!isRole(role)) throw badRequest('Unknown role');
     if (!canEditRoleSop(ROLES, USER_ADMIN_ROLES, req.user.role, role)) throw forbidden('Only the managers of this team can change its SOP');
     const sop = normaliseRoleSop(req.body || {});
-    await store(db, `role:${role}`, sop, !sop.daily.length && !sop.weekly.length && !sop.system.length, req.user.id);
+    await store(db, `role:${role}`, sop, !sop.daily.length && !sop.weekly.length && !sop.system.length, req.user);
     res.json(await customSops(db));
   });
 

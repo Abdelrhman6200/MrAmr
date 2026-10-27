@@ -1,0 +1,21 @@
+{
+  "name": "TaskFlow",
+  "short_name": "TaskFlow",
+  "description": "Tasks, calls, centers and grades for the whole team",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f7f6",
+  "theme_color": "#15803d",
+  "dir": "auto",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "My tasks", "url": "/tasks?scope=mine" },
+    { "name": "Grades", "url": "/grades" },
+    { "name": "Calls", "url": "/calls" }
+  ]
+}
