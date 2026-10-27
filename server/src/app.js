@@ -19,6 +19,7 @@ import delegationRoutes from './routes/delegations.js';
 import recurringRoutes from './routes/recurring.js';
 import gradeRoutes from './routes/grades.js';
 import { leaveRoutes, shiftRoutes } from './routes/people.js';
+import platformRoutes from './routes/platform.js';
 import { cors, securityHeaders } from './security.js';
 import { createMailer, emailDispatcher } from './mail.js';
 import { background } from './background.js';
@@ -161,6 +162,7 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), wh
   api.use('/grades', gradeRoutes(ctx));
   api.use('/leave', leaveRoutes(ctx));
   api.use('/shifts', shiftRoutes(ctx));
+  api.use('/platform', platformRoutes(ctx));
   api.use((_req, _res, next) => next(new HttpError(404, 'Unknown API route')));
   app.use('/api', api);
 

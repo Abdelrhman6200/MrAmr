@@ -3,15 +3,18 @@ import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import Icon from '../components/Icon.jsx';
 import { TaskTable } from '../components/TaskViews.jsx';
+import Analytics from './PlatformAnalytics.jsx';
 import { Avatar, Empty, Modal, Spinner, StatusPill, TrackPicker, TrackTag, UserSelect, formatDate, isOverdue, todayISO, useTaskDialog } from '../components/ui.jsx';
 
-// The online platform in one place, one tab per kind of work.
+// The online platform in one place, one tab per kind of work. The schedule is
+// the publishing timeline: content uploads and the exams that go live.
 const TABS = [
-  { key: 'schedule', types: ['content_upload'], icon: 'upload' },
+  { key: 'schedule', types: ['content_upload', 'platform_exam'], icon: 'upload' },
   { key: 'exams', types: ['platform_exam', 'exam_results'], icon: 'note' },
   { key: 'forums', types: ['forum_moderation'], icon: 'comment' },
   { key: 'complaints', types: ['complaint'], icon: 'alert' },
   { key: 'issues', types: ['bug', 'feature'], icon: 'flag' },
+  { key: 'analytics', types: [], icon: 'reports' },
 ];
 
 const DAY = 864e5;
@@ -32,7 +35,7 @@ export default function Platform() {
 
   useEffect(() => {
     setTasks(null);
-    api.get('/tasks', { type: current.types.join(',') }).then(setTasks);
+    if (current.types.length) api.get('/tasks', { type: current.types.join(',') }).then(setTasks);
   }, [tab, version]);
 
   const stats = useMemo(() => {
@@ -61,9 +64,11 @@ export default function Platform() {
               <Icon name="calendar" size={16} /> {t('platform.plan')}
             </button>
           )}
-          <button className="btn" onClick={() => create({ type: current.types[0] })}>
-            <Icon name="plus" size={16} /> {t('platform.new')}
-          </button>
+          {current.types.length > 0 && (
+            <button className="btn" onClick={() => create({ type: current.types[0] })}>
+              <Icon name="plus" size={16} /> {t('platform.new')}
+            </button>
+          )}
         </div>
       </div>
 
@@ -75,7 +80,9 @@ export default function Platform() {
         ))}
       </div>
 
-      {!tasks ? (
+      {tab === 'analytics' ? (
+        <Analytics />
+      ) : !tasks ? (
         <Spinner />
       ) : (
         <>

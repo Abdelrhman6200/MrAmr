@@ -29,6 +29,8 @@ const BACKUP_TABLES = [
   'leave_requests',
   'shifts',
   'audit_log',
+  'platform_stats',
+  'platform_progress',
 ];
 // Not in the backup: attachments (files can be large; download them from their tasks).
 

@@ -115,3 +115,72 @@ test('files can be attached to a task, opened and removed', async () => {
   assert.equal((await po.call('DELETE', `/tasks/${t.id}/attachments/${file.id}`)).status, 204);
   assert.equal((await po.call('GET', `/tasks/${t.id}`)).body.attachments.length, 1);
 });
+
+test('the Product Owner records weekly numbers; others only read them', async () => {
+  const po = await signIn('product@taskflow.local');
+  const cs = await signIn('cs.head@taskflow.local');
+  const mkt = await signIn('marketing1@taskflow.local');
+
+  // Any day files under its week's Saturday; blanks stay empty.
+  const saved = await po.call('PUT', '/platform/stats/2026-10-21', { total_users: '1,250', active_users: 800, avg_progress: '61%', sessions: '', note: 'Unit 2 exam' });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.week, '2026-10-17');
+  assert.equal(saved.body.total_users, 1250);
+  assert.equal(saved.body.avg_progress, 61);
+  assert.equal(saved.body.sessions, null);
+
+  const imported = await po.call('POST', '/platform/stats/import', {
+    rows: [
+      { week: '10/10/2026', total_users: 1200, active_users: 700 },
+      { week: '2026-10-18', total_users: 1260, active_users: 820 },
+      { week: 'soon', total_users: 1 },
+    ],
+  });
+  assert.deepEqual(imported.body, { weeks: 2, skipped: 1 });
+
+  const { weeks } = (await cs.call('GET', '/platform/stats')).body;
+  assert.deepEqual(weeks.map((w) => [w.week, w.active_users]), [['2026-10-10', 700], ['2026-10-17', 820]], 'oldest first, the second import replaced the week');
+  assert.equal((await cs.call('PUT', '/platform/stats/2026-10-21', { total_users: 1 })).status, 403);
+  assert.equal((await mkt.call('GET', '/platform/stats')).status, 403);
+});
+
+test('course progress is imported, filtered, and behind students go to Customer Service', async () => {
+  const po = await signIn('product@taskflow.local');
+  const cs = await signIn('cs.head@taskflow.local');
+  const day = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+
+  const rows = [
+    { name: 'Student A', phone: '0101', progress: '0.9', last_seen: day(1) },
+    { name: 'Student B', phone: '0102', progress: '0.2', last_seen: day(2) },
+    { name: 'Student C', phone: '', progress: '0.1', last_seen: day(20) },
+    { name: 'Student D', phone: '0104', progress: '', lessons_done: 3, lessons_total: 10, last_seen: '' },
+    { name: '', phone: '0105' },
+  ];
+  const res = await po.call('POST', '/platform/progress/import', { course: 'Physics 3', rows });
+  assert.deepEqual(res.body, { course: 'Physics 3', students: 4 });
+  // Importing again replaces the course.
+  await po.call('POST', '/platform/progress/import', { course: 'Physics 3', rows });
+
+  const all = (await cs.call('GET', '/platform/progress?course=Physics%203')).body;
+  assert.equal(all.total, 4);
+  assert.deepEqual(all.courses.find((c) => c.course === 'Physics 3'), { ...all.courses.find((c) => c.course === 'Physics 3'), students: 4, avg_progress: 38, away_7: 2 });
+  const progress = Object.fromEntries(all.students.map((s) => [s.student_name, s.progress]));
+  assert.deepEqual(progress, { 'Student A': 90, 'Student B': 20, 'Student C': 10, 'Student D': 30 });
+
+  const behind = (await cs.call('GET', '/platform/progress?course=Physics%203&below=50')).body;
+  assert.deepEqual(behind.students.map((s) => s.student_name).sort(), ['Student B', 'Student C', 'Student D']);
+  const away = (await cs.call('GET', '/platform/progress?course=Physics%203&inactive=7')).body;
+  assert.deepEqual(away.students.map((s) => s.student_name).sort(), ['Student C', 'Student D']);
+
+  assert.equal((await cs.call('POST', '/platform/progress/import', { course: 'X', rows })).status, 403);
+  assert.equal((await po.call('POST', '/platform/progress/call-list', { course: 'Physics 3' })).status, 400, 'needs a filter');
+
+  // Only students with a phone number are called.
+  const sent = await po.call('POST', '/platform/progress/call-list', { course: 'Physics 3', below: 50 });
+  assert.equal(sent.status, 201);
+  assert.equal(sent.body.calls, 2);
+  const list = (await cs.call('GET', `/calls/lists/${sent.body.list_id}`)).body;
+  assert.ok(list, 'Customer Service sees the list');
+  const notes = (await cs.call('GET', '/notifications')).body;
+  assert.ok((notes.items || notes).some((n) => n.type === 'calls_assigned' && n.link === `/calls?list=${sent.body.list_id}`));
+});

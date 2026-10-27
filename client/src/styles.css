@@ -3159,3 +3159,97 @@ html[lang='ar'] .auth-pitch h1 {
   box-shadow: none;
   padding: 4px 0;
 }
+
+/* Platform users & progress */
+.analytics {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.analytics-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 18px 0 8px;
+}
+.trend-change {
+  font-size: 12px;
+  font-weight: 600;
+  margin-inline-start: 8px;
+  letter-spacing: 0;
+}
+.trend-change.up {
+  color: var(--success);
+}
+.trend-change.down {
+  color: var(--danger);
+}
+.trend {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 150px;
+  padding: 4px 0 0;
+  margin-bottom: 14px;
+  overflow-x: auto;
+}
+.trend-bar {
+  flex: 1 0 34px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+}
+.trend-fill {
+  width: 100%;
+  min-height: 2px;
+  max-height: calc(100% - 40px);
+  background: var(--accent);
+  border-radius: 4px 4px 0 0;
+  opacity: 0.85;
+}
+.trend-bar:last-child .trend-fill {
+  opacity: 1;
+}
+.trend-value,
+.trend-label {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+.table-scroll .table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  font-size: 13px;
+}
+.course-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.course-card {
+  display: grid;
+  gap: 6px;
+  text-align: start;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.course-card:hover {
+  border-color: var(--border-strong);
+}
+.course-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}

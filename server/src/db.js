@@ -10,7 +10,7 @@
 const NOW = "to_char(timezone('UTC', now()), 'YYYY-MM-DD HH24:MI:SS')";
 
 // Bump when the schema below changes; startup re-applies it once.
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -408,6 +408,42 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at TEXT NOT NULL DEFAULT ${NOW}
 );
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
+
+-- Added in schema 9 -----------------------------------------------------------
+
+-- The online platform's numbers, one row per week (week = its Saturday), entered
+-- or imported by the Product Owner from the platform's own reports.
+CREATE TABLE IF NOT EXISTS platform_stats (
+  week TEXT PRIMARY KEY,
+  total_users INTEGER,
+  new_users INTEGER,
+  active_users INTEGER,
+  sessions INTEGER,
+  avg_session_minutes REAL,
+  lessons_completed INTEGER,
+  avg_progress REAL,
+  exam_attempts INTEGER,
+  note TEXT DEFAULT '',
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TEXT NOT NULL DEFAULT ${NOW}
+);
+
+-- Each student's progress in a course, from the platform's export (replaced per
+-- course on each import).
+CREATE TABLE IF NOT EXISTS platform_progress (
+  id SERIAL PRIMARY KEY,
+  course TEXT NOT NULL,
+  student_name TEXT NOT NULL,
+  student_code TEXT DEFAULT '',
+  phone TEXT DEFAULT '',
+  progress REAL,
+  lessons_done INTEGER,
+  lessons_total INTEGER,
+  last_seen TEXT,
+  imported_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  imported_at TEXT NOT NULL DEFAULT ${NOW}
+);
+CREATE INDEX IF NOT EXISTS idx_platform_progress_course ON platform_progress(course);
 `;
 
 // Turns `?` placeholders into $1, $2 … (ignoring any inside quoted strings).
