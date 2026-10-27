@@ -36,6 +36,34 @@ const BUILT_IN = {
       done: 'جودة المحتوى وافقت على الدرس، والملفات النهائية في فولدر الكورس.',
     },
   },
+  filming: {
+    en: {
+      when: 'Filming a lesson or promo, or a photo shoot.',
+      target: 'Equipment ready 30 minutes before the shoot; files backed up the same day.',
+      steps: ['!Get the brief: what, where, who, and what must be delivered', '!Check the equipment: batteries, memory cards, lights, microphone', 'Set up, and test sound and light', '!Shoot, with extra takes of the important parts', '!Back up the files the same day, in two places', 'Hand the files to the editor with notes on what is where'],
+      done: 'Everything asked for was shot, and the files are backed up twice and handed over.',
+    },
+    ar: {
+      when: 'تصوير درس أو فيديو دعاية، أو جلسة تصوير صور.',
+      target: 'المعدات جاهزة قبل التصوير بنص ساعة، والملفات متخزنة في نفس اليوم.',
+      steps: ['!خد البريف: إيه، فين، مين، والمطلوب تسليمه', '!راجع المعدات: البطاريات، كروت الميموري، الإضاءة، المايك', 'جهّز المكان وجرّب الصوت والإضاءة', '!صوّر، وخد لقطات زيادة للأجزاء المهمة', '!خزّن الملفات في نفس اليوم في مكانين', 'سلّم الملفات للمونتير ومعاها ملاحظات بمكان كل حاجة'],
+      done: 'كل المطلوب اتصوّر، والملفات متخزنة في مكانين واتسلّمت.',
+    },
+  },
+  video_editing: {
+    en: {
+      when: 'Raw footage has to become a finished lesson or video.',
+      target: 'A lesson edited within 2 working days of recording.',
+      steps: ['!Get the raw files and the script or brief', 'Make the rough cut', 'Clean the sound and even out the levels', 'Add slides, captions, intro and outro', '!Export in the platform’s format', '!Send for review (Content Quality for lessons, Marketing for promos)', '!Make the changes asked for and put the final file in the course folder'],
+      done: 'The approved final file is in the right folder.',
+    },
+    ar: {
+      when: 'تصوير خام محتاج يبقى درس أو فيديو جاهز.',
+      target: 'الدرس يتمنتج خلال يومين شغل من التسجيل.',
+      steps: ['!استلم الملفات الخام والسكريبت أو البريف', 'اعمل القص المبدئي', 'نضّف الصوت وظبط مستواه', 'ضيف السلايدز والترجمة والمقدمة والخاتمة', '!صدّر بصيغة المنصة', '!ابعته للمراجعة (جودة المحتوى للدروس، والتسويق للدعاية)', '!عدّل المطلوب وحط النسخة النهائية في فولدر الكورس'],
+      done: 'النسخة النهائية المعتمدة في الفولدر الصح.',
+    },
+  },
   content_review: {
     en: {
       when: 'A lesson or material is waiting for quality review.',

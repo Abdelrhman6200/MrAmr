@@ -54,6 +54,22 @@ export const ROLE_SOPS = {
       escalate: 'مدير العمليات.',
     },
   },
+  media_producer: {
+    en: {
+      purpose: 'Films and edits: lessons for the courses, and photos and videos for marketing.',
+      daily: ['Check your shoots and edits for today', 'Back up yesterday’s footage if it isn’t yet', 'Send finished edits for review'],
+      weekly: ['Agree next week’s shoots with the Head of Content and Marketing', 'Check the equipment and order what is missing', 'Clean up and organise the footage folders'],
+      system: ['Filming and Video editing tasks follow their SOPs; backups and review are required steps', 'Lessons are reviewed by Content Quality, promos by the Marketing Manager', 'Mark a task Blocked if you are waiting for a script or a teacher'],
+      escalate: 'Head of Content (and the Marketing Manager for marketing work).',
+    },
+    ar: {
+      purpose: 'بيصوّر ويعمل مونتاج: دروس الكورسات، وصور وفيديوهات التسويق.',
+      daily: ['شوف التصوير والمونتاج المطلوب النهارده', 'خزّن تصوير امبارح لو لسه متخزنش', 'ابعت المونتاج اللي خلص للمراجعة'],
+      weekly: ['اتفق على تصوير الأسبوع الجاي مع رئيس قسم المحتوى والتسويق', 'راجع المعدات واطلب الناقص', 'رتّب فولدرات التصوير'],
+      system: ['مهام "تصوير" و"مونتاج" ماشية على الـ SOP بتاعها، والتخزين والمراجعة خطوات مطلوبة', 'الدروس بتراجعها جودة المحتوى، والدعاية بيراجعها مدير التسويق', 'خلّي المهمة "متوقفة" لو مستني سكريبت أو مستر'],
+      escalate: 'رئيس قسم المحتوى (ومدير التسويق في شغل التسويق).',
+    },
+  },
   instructor: {
     en: {
       purpose: 'Teaches: records the lessons and teaches the classes at the centers.',

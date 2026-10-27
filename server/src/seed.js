@@ -253,6 +253,7 @@ export async function seed(db, { ceo = null } = {}) {
     await academicSample(prepare, ids, hash);
     await platformSample(prepare, ids, hash);
     await csLeadSample(prepare, ids, hash);
+    await mediaSample(prepare, ids, hash);
 
     // Customer Service call list
     const callList = (
@@ -489,12 +490,35 @@ async function csLeadSample(prepare, ids, hash) {
   );
 }
 
+// Two video editors / photographers in the content team, who also shoot for marketing.
+const MEDIA_PEOPLE = [
+  ['med1', 'Mostafa Adel', 'media1@taskflow.local', 'media_producer', 'hoc', '#7c3aed'],
+  ['med2', 'Hossam Ali', 'media2@taskflow.local', 'media_producer', 'hoc', '#a78bfa'],
+];
+
+async function mediaSample(prepare, ids, hash) {
+  if (!ids.hoc) return;
+  const insUser = prepare('INSERT INTO users (name, email, password_hash, role, title, manager_id, avatar_color) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  for (const [key, name, email, role, mgr, color] of MEDIA_PEOPLE) {
+    ids[key] = (await insUser.run(name, email, hash, role, null, ids[mgr], color)).lastInsertRowid;
+  }
+  const { task } = sampleHelpers(prepare, ids);
+  const sop = (type, done = 0) => SOPS[type].en.steps.map((s, i) => [s.text, i < done, s.required]);
+  await task(null, 'Film Physics Lesson 5: Circular Motion with Youssef', 'filming', 'todo', 'high', 'med1', 'hoc', 1, { checklist: sop('filming', 1) });
+  await task(null, 'Edit Physics Lesson 4: Momentum', 'video_editing', 'in_progress', 'high', 'med2', 'hoc', 2, { reviewer: ids.cq ? 'cq' : null, checklist: sop('video_editing', 3) });
+  await task(null, 'Edit Physics Lesson 3: Work & Energy', 'video_editing', 'done', 'medium', 'med2', 'hoc', -4, { doneAgo: 3, checklist: sop('video_editing', 7) });
+  if (ids.mkt) {
+    await task(null, 'Photo shoot for the Back-to-School campaign', 'filming', 'todo', 'medium', 'med1', 'mkt', 4, { tags: 'campaign', checklist: sop('filming') });
+  }
+}
+
 // Sample parts added after a site first loaded the sample: each is added once
 // (its counter marks it), under the Head of Company the sample belongs to.
 const SAMPLE_PARTS = [
   { counter: 'sample_academic', marker: 'academic.head@taskflow.local', add: academicSample },
   { counter: 'sample_platform', marker: 'platform1@taskflow.local', add: platformSample },
   { counter: 'sample_cs_lead', marker: 'cs.lead@taskflow.local', add: csLeadSample },
+  { counter: 'sample_media', marker: 'media1@taskflow.local', add: mediaSample },
 ];
 
 export async function upgradeSample(db) {
