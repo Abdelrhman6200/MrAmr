@@ -16,11 +16,13 @@ import centerRoutes from './routes/centers.js';
 import adminRoutes from './routes/admin.js';
 import sopRoutes from './routes/sops.js';
 import delegationRoutes from './routes/delegations.js';
+import recurringRoutes from './routes/recurring.js';
 import { cors, securityHeaders } from './security.js';
 import { createMailer, emailDispatcher } from './mail.js';
 import { background } from './background.js';
 import { autoLoadSample, readStatus } from './seed.js';
-import { ensureWeeklyDuties, weekStart } from './weekly.js';
+import { ensureRecurring, ensureWeeklyDuties } from './weekly.js';
+import { localDate } from './time.js';
 
 export function createApp({ db, secret, staticDir, mailer = createMailer({}), appUrl = null, corsOrigins = [], cronSecret = null, autoSample = false }) {
   const app = express();
@@ -78,6 +80,7 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
   api.get('/cron/emails', async (req, res) => {
     if (!cronSecret || req.get('authorization') !== `Bearer ${cronSecret}`) throw new HttpError(401, 'Not authenticated');
     await ensureWeeklyDuties(db);
+    await ensureRecurring(db);
     await dispatchEmails();
     res.json({ ok: true });
   });
@@ -92,17 +95,19 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
       next(err);
     }
   });
-  // This week's recurring duties, checked once per instance per week and whenever
-  // the people change (a new assistant gets theirs straight away).
-  let weeklyChecked = null;
+  // Today's recurring work (weekly duties, recurring tasks), checked once per
+  // instance per day and whenever the people change (a new assistant gets
+  // theirs straight away). Recurring tasks also run this when they are saved.
+  let dailyChecked = null;
   api.use(async (req, _res, next) => {
-    const key = `${weekStart()}:${req.orgVersion}`;
-    if (key === weeklyChecked) return next();
+    const key = `${localDate()}:${req.orgVersion}`;
+    if (key === dailyChecked) return next();
     try {
       await ensureWeeklyDuties(db);
-      weeklyChecked = key;
+      await ensureRecurring(db);
+      dailyChecked = key;
     } catch (err) {
-      console.error('Creating weekly duties failed:', err);
+      console.error('Creating recurring work failed:', err);
     }
     next();
   });
@@ -129,6 +134,7 @@ export function createApp({ db, secret, staticDir, mailer = createMailer({}), ap
   api.use('/admin', adminRoutes(ctx));
   api.use('/sops', sopRoutes(ctx));
   api.use('/delegations', delegationRoutes(ctx));
+  api.use('/recurring', recurringRoutes(ctx));
   api.use((_req, _res, next) => next(new HttpError(404, 'Unknown API route')));
   app.use('/api', api);
 

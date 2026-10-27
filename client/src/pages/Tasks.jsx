@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../context.jsx';
 import { Board, TaskFilters, TaskTable } from '../components/TaskViews.jsx';
+import Icon from '../components/Icon.jsx';
 
 const FILTER_KEYS = ['q', 'scope', 'status', 'priority', 'type', 'track', 'project_id', 'assignee_id', 'due'];
 
@@ -59,6 +60,9 @@ export default function Tasks() {
     <div className="page">
       <div className="page-head">
         <h1>{t('tasks.title')}</h1>
+        <Link className="btn sm" to="/recurring">
+          <Icon name="calendar" size={15} /> {t('rec.title')}
+        </Link>
         <div className="seg">
           <button className={view === 'board' ? 'active' : ''} onClick={() => switchView('board')}>
             {t('tasks.board')}
