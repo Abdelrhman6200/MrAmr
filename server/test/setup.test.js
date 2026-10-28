@@ -170,3 +170,20 @@ test('a load the previous version marked done but never finished is retried', as
   await removeSampleData(db, ceo);
   assert.equal(await autoLoadSample(db, ceo.email), false);
 });
+
+test('ADD_ACCOUNTS creates staff accounts once, with their role and manager', async () => {
+  const { addAccounts } = await import('../src/bootstrap.js');
+  const env = {
+    ADD_ACCOUNTS: 'Boss.Mkt@x.io, marketing_manager, Ahmed Rawy; coord@x.io, marketing_member, Razan Omar, boss.mkt@x.io, Marketing Coordinator\nbad-line, nobody',
+    ADD_ACCOUNTS_PASSWORD: 'first-pass-1',
+  };
+  assert.equal(await addAccounts(db, { ADD_ACCOUNTS: env.ADD_ACCOUNTS, ADD_ACCOUNTS_PASSWORD: 'short' }), 0);
+  assert.equal(await addAccounts(db, env), 2);
+  assert.equal(await addAccounts(db, env), 0, 'already there');
+  const coord = await db.get('SELECT u.*, m.email AS manager_email FROM users u LEFT JOIN users m ON m.id = u.manager_id WHERE u.email = ?', ['coord@x.io']);
+  assert.equal(coord.role, 'marketing_member');
+  assert.equal(coord.title, 'Marketing Coordinator');
+  assert.equal(coord.manager_email, 'boss.mkt@x.io');
+  const login = await post('/auth/login', { email: 'coord@x.io', password: 'first-pass-1' });
+  assert.equal(login.status, 200);
+});

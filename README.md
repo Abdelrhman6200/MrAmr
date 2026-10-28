@@ -133,6 +133,7 @@ On Vercel nothing is required except a connected database (see below). Everythin
 | `DEMO_DATA` | optional | `1` loads the demo company into an empty database on Vercel (locally the demo loads by default). |
 | `APP_URL` | optional | public address used for links in emails. On Vercel it defaults to the production domain. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `MAIL_FROM` | optional | an email account to send from. Without `SMTP_HOST` the app works but sends no email. |
+| `ADD_ACCOUNTS`, `ADD_ACCOUNTS_PASSWORD` | optional | staff accounts created when the server starts, if they don't exist yet: one per line (or separated by `;`) as `email, role, name, manager's email, title` (e.g. `x@gmail.com, marketing_member, Razan Omar, boss@gmail.com, Marketing Coordinator`), all with the first password in `ADD_ACCOUNTS_PASSWORD`. Remove both once everyone has signed in and changed their password. |
 | `CRON_SECRET` | optional | protects the daily job (`/api/cron/emails`): recurring tasks, the managers' weekly summaries, and email retries. Vercel Cron sends it automatically. |
 | `DATABASE_CA` | optional | the database's CA certificate, to verify its TLS certificate. Connections are always encrypted. |
 | `CORS_ORIGIN` | optional | only if the web app is hosted on a different address from the API. |
