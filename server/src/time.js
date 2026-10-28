@@ -1,7 +1,26 @@
 // All timestamps the server records are UTC text 'YYYY-MM-DD HH:MM:SS', so SQL can
 // compare them as plain strings. Local-time values (today's date, call-back times)
 // use APP_TIMEZONE — hosts like Vercel always run in UTC, so we can't rely on TZ.
-export const APP_TIMEZONE = process.env.APP_TIMEZONE || process.env.TZ || 'Africa/Cairo';
+export const APP_TIMEZONE = pickTimeZone(process.env);
+
+// APP_TIMEZONE if valid, else TZ unless it is just the host's UTC (Vercel sets
+// TZ=":UTC", which isn't a name Intl accepts), else Cairo.
+export function pickTimeZone(env) {
+  const valid = (z) => {
+    try {
+      new Intl.DateTimeFormat('en', { timeZone: z });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const app = String(env.APP_TIMEZONE || '').trim();
+  if (app && valid(app)) return app;
+  if (app) console.warn(`APP_TIMEZONE "${app}" is not a time zone; using Africa/Cairo.`);
+  const tz = String(env.TZ || '').trim().replace(/^:/, '');
+  if (tz && !/^(UTC|Etc\/UTC|GMT|Etc\/GMT|Z|UCT)$/i.test(tz) && valid(tz)) return tz;
+  return 'Africa/Cairo';
+}
 
 const utc = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
 
