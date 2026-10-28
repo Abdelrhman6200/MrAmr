@@ -1,6 +1,6 @@
 import { hashPassword, verifyPassword } from './auth.js';
 import { setPassword } from './passwords.js';
-import { bump } from './db.js';
+import { bump, readCounter } from './db.js';
 import { autoLoadSample, seed } from './seed.js';
 import { ROLES } from './meta.js';
 
@@ -10,6 +10,7 @@ import { ROLES } from './meta.js';
 export async function bootstrap(db, env = process.env, { allowDemo = true, autoSample = false } = {}) {
   const outcome = await firstRun(db, env, allowDemo);
   await addAccounts(db, env);
+  await addDemoAccounts(db);
   // Template data for trying the app, loaded once without anyone clicking anything.
   if (autoSample) {
     try {
@@ -95,11 +96,35 @@ export async function addAccounts(db, env = process.env) {
   const rows = ADD_ACCOUNTS.split(/[;\n]/)
     .map((line) => line.split(',').map((x) => x.trim()))
     .filter(([email]) => email);
+  return createAccounts(db, rows, hashPassword(ADD_ACCOUNTS_PASSWORD), 'ADD_ACCOUNTS');
+}
+
+// The company's first staff for the demo, created once if missing (an account
+// that exists, or was removed after, is left alone). First password: 12345678 —
+// stored scrambled; change it after signing in.
+const DEMO_ACCOUNTS = [
+  ['ahmedrawymahmoud@gmail.com', 'marketing_manager', 'Ahmed Rawy', 'abdelrhman.shoman62@gmail.com', 'Marketing Manager'],
+  ['razanomar1515@gmail.com', 'marketing_member', 'Razan Omar', 'ahmedrawymahmoud@gmail.com', 'Marketing Coordinator'],
+];
+const DEMO_HASH =
+  'scrypt$decd35212b19cc838ce8b67c77e0cc4a$dd13b9a02a2c7498271c8a8ea91650c38d9638636828ab58ea3168e18a3928341401f5621cde2481ca1cd0e742beb1f2574f61c0ca8338ff6024c485b8e0d59f';
+
+export async function addDemoAccounts(db) {
+  // Once per database: removing one later doesn't bring it back.
+  if (await readCounter(db, 'demo_accounts')) return 0;
+  // Not before the Head of Company exists: the first visitor still sets up the site.
+  if (!(await db.get("SELECT 1 FROM users WHERE role = 'ceo' AND active = 1"))) return 0;
+  const added = await createAccounts(db, DEMO_ACCOUNTS, DEMO_HASH, 'Demo accounts');
+  await bump(db, 'demo_accounts');
+  return added;
+}
+
+async function createAccounts(db, rows, hash, label) {
   let added = 0;
   for (const [rawEmail, role, name, managerEmail, title] of rows) {
     const email = rawEmail.toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || !ROLES[role]) {
-      console.warn(`ADD_ACCOUNTS: skipped "${rawEmail}" (needs an email and a role such as marketing_member).`);
+      console.warn(`${label}: skipped "${rawEmail}" (needs an email and a role such as marketing_member).`);
       continue;
     }
     const created = await db.tx(async (tx) => {
@@ -107,14 +132,14 @@ export async function addAccounts(db, env = process.env) {
       const manager = managerEmail ? await tx.get('SELECT id FROM users WHERE email = ?', [managerEmail.toLowerCase()]) : null;
       await tx.run(
         "INSERT INTO users (name, email, password_hash, role, title, manager_id, avatar_color) VALUES (?, ?, ?, ?, ?, ?, '#0ea5e9') ON CONFLICT (email) DO NOTHING",
-        [name || email.split('@')[0], email, hashPassword(ADD_ACCOUNTS_PASSWORD), role, title || ROLES[role].label, manager?.id ?? null],
+        [name || email.split('@')[0], email, hash, role, title || ROLES[role].label, manager?.id ?? null],
       );
       await bump(tx, 'org');
       return true;
     });
     if (created) {
       added++;
-      console.log(`ADD_ACCOUNTS: created ${email} (${role}).`);
+      console.log(`${label}: created ${email} (${role}).`);
     }
   }
   return added;

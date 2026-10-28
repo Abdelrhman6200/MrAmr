@@ -187,3 +187,24 @@ test('ADD_ACCOUNTS creates staff accounts once, with their role and manager', as
   const login = await post('/auth/login', { email: 'coord@x.io', password: 'first-pass-1' });
   assert.equal(login.status, 200);
 });
+
+test('the demo staff accounts are added once, after the Head of Company exists', async () => {
+  const { addDemoAccounts } = await import('../src/bootstrap.js');
+  const { verifyPassword } = await import('../src/auth.js');
+  const before = await db.get("SELECT 1 FROM users WHERE role = 'ceo'");
+  assert.ok(before, 'the earlier tests created the Head of Company');
+  // Earlier tests here started the server, which already added them once: start over.
+  await db.run("DELETE FROM users WHERE email IN ('ahmedrawymahmoud@gmail.com', 'razanomar1515@gmail.com')");
+  await db.run("DELETE FROM app_state WHERE key = 'demo_accounts'");
+  await db.run("UPDATE users SET email = 'abdelrhman.shoman62@gmail.com' WHERE id = (SELECT id FROM users WHERE role = 'ceo' ORDER BY id LIMIT 1)");
+  assert.equal(await addDemoAccounts(db), 2);
+  const razan = await db.get('SELECT u.*, m.email AS manager_email FROM users u LEFT JOIN users m ON m.id = u.manager_id WHERE u.email = ?', ['razanomar1515@gmail.com']);
+  assert.equal(razan.role, 'marketing_member');
+  assert.equal(razan.title, 'Marketing Coordinator');
+  assert.equal(razan.manager_email, 'ahmedrawymahmoud@gmail.com');
+  assert.ok(verifyPassword('12345678', razan.password_hash));
+  const ahmed = await db.get('SELECT u.role, m.email AS manager_email FROM users u LEFT JOIN users m ON m.id = u.manager_id WHERE u.email = ?', ['ahmedrawymahmoud@gmail.com']);
+  assert.deepEqual({ ...ahmed }, { role: 'marketing_manager', manager_email: 'abdelrhman.shoman62@gmail.com' });
+  await db.run("DELETE FROM users WHERE email = 'razanomar1515@gmail.com'");
+  assert.equal(await addDemoAccounts(db), 0, 'once: a removed account stays removed');
+});
