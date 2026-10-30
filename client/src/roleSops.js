@@ -38,6 +38,22 @@ export const ROLE_SOPS = {
       escalate: 'رئيس الشركة.',
     },
   },
+  ops_member: {
+    en: {
+      purpose: 'Keeps the day-to-day administration running: schedules, staff records, centers and follow-ups for the Operations Manager.',
+      daily: ['Check your tasks and the centers schedule for today', 'Follow up what the Operations Manager assigned to you and update each task', 'Answer staff and center requests, or raise them as tasks'],
+      weekly: ['Prepare the weekly schedule and attendance follow-ups', 'Check open requests and leave with the Operations Manager', 'Report anything that keeps going wrong'],
+      system: ['Your tasks come from the Operations Manager: tick the SOP steps and comment on progress', 'Centers: the weekly schedule', 'Raise a task to the right team instead of a side message'],
+      escalate: 'Operations Manager.',
+    },
+    ar: {
+      purpose: 'بيمشّي الشغل الإداري اليومي: الجداول وبيانات الموظفين والسناتر والمتابعات لمدير العمليات.',
+      daily: ['شوف مهامك وجدول السناتر النهارده', 'تابع اللي مدير العمليات أسنده ليك وحدّث كل مهمة', 'رد على طلبات الموظفين والسناتر أو اعملها مهام'],
+      weekly: ['جهّز الجدول الأسبوعي ومتابعة الحضور', 'راجع الطلبات المفتوحة والإجازات مع مدير العمليات', 'بلّغ بأي حاجة بتتكرر غلط'],
+      system: ['مهامك بتيجي من مدير العمليات: علّم خطوات الإجراء واكتب التقدم في التعليقات', 'المراكز: الجدول الأسبوعي', 'ابعت مهمة للفريق الصح بدل الرسايل الجانبية'],
+      escalate: 'مدير العمليات.',
+    },
+  },
   head_of_content: {
     en: {
       purpose: 'Owns the courses: what gets recorded, by whom, when, and to what standard.',

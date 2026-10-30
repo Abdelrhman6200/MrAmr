@@ -1839,6 +1839,7 @@ const ar = {
 
   'role.ceo': 'رئيس الشركة',
   'role.ops_manager': 'مدير العمليات',
+  'role.ops_member': 'عضو فريق العمليات',
   'role.head_of_content': 'رئيس قسم المحتوى',
   'role.instructor': 'مدرّس',
   'role.media_producer': 'مصوّر ومونتير',

@@ -16,6 +16,7 @@ export const DEPARTMENTS = {
 export const ROLES = {
   ceo: { label: 'Head of Company', department: 'executive', level: 'executive' },
   ops_manager: { label: 'Operations Manager', department: 'operations', level: 'manager' },
+  ops_member: { label: 'Operations Team Member', department: 'operations', level: 'member' },
   head_of_content: { label: 'Head of Content', department: 'content', level: 'manager' },
   instructor: { label: 'Instructor', department: 'content', level: 'member' },
   media_producer: { label: 'Video Editor & Photographer', department: 'content', level: 'member' },
