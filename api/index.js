@@ -11,7 +11,9 @@ import { corsOrigins } from '../server/src/config.js';
 import { bootstrap } from '../server/src/bootstrap.js';
 import { createMailer } from '../server/src/mail.js';
 import { background } from '../server/src/background.js';
-import { autoLoadSample } from '../server/src/seed.js';
+import { autoLoadSample, removeDemoData } from '../server/src/seed.js';
+
+const sampleWanted = process.env.SAMPLE_DATA === '1';
 
 // A deployment setting is missing or wrong; the message is shown on the sign-in screen.
 class SetupError extends Error {}
@@ -58,9 +60,10 @@ async function init() {
     await db.close().catch(() => {});
     throw err.message.startsWith('ADMIN_') ? new SetupError(err.message) : err;
   }
-  // The sample team and tasks load once by themselves (SAMPLE_DATA=0 turns that
-  // off), in the background: requests don't wait for it.
-  if (process.env.SAMPLE_DATA !== '0') background('Loading the sample data', () => autoLoadSample(db, process.env.ADMIN_EMAIL));
+  // Sample (demo) team and tasks only when asked for with SAMPLE_DATA=1; otherwise
+  // any already loaded is removed, once. In the background: requests don't wait.
+  if (sampleWanted) background('Loading the sample data', () => autoLoadSample(db, process.env.ADMIN_EMAIL));
+  else background('Removing the sample data', () => removeDemoData(db));
   return createApp({
     db,
     secret: process.env.AUTH_SECRET || (await storedSecret(db, 'auth')),
@@ -68,7 +71,7 @@ async function init() {
     appUrl: process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null),
     corsOrigins: corsOrigins(),
     cronSecret: process.env.CRON_SECRET,
-    autoSample: process.env.SAMPLE_DATA !== '0',
+    autoSample: sampleWanted,
     digests: true,
   });
 }

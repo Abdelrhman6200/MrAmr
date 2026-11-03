@@ -15,6 +15,7 @@ import Reports from './pages/Reports.jsx';
 import Users from './pages/Users.jsx';
 import Settings from './pages/Settings.jsx';
 import Sops from './pages/Sops.jsx';
+import Guides from './pages/Guides.jsx';
 import Platform from './pages/Platform.jsx';
 import Recurring from './pages/Recurring.jsx';
 import Grades from './pages/Grades.jsx';
@@ -51,6 +52,7 @@ function Routed() {
         <Route path="/users" element={<Users />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/sops" element={<Sops />} />
+        <Route path="/guides" element={<Guides />} />
         <Route path="/platform" element={<Platform />} />
         <Route path="/recurring" element={<Recurring />} />
         <Route path="/grades" element={<Grades />} />

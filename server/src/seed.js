@@ -665,6 +665,19 @@ const SAMPLE_TABLES = [
 
 export const hasSampleData = async (db) => !!(await db.get('SELECT 1 FROM sample_rows LIMIT 1'));
 
+// A live site without the sample: removes it if it was loaded, keeping real work
+// (it passes to the Head of Company). Returns the rows removed.
+export async function removeDemoData(db) {
+  if (!(await hasSampleData(db))) return 0;
+  const keeper = await db.get(
+    "SELECT * FROM users WHERE role = 'ceo' AND active = 1 AND id NOT IN (SELECT row_id FROM sample_rows WHERE tbl = 'users') ORDER BY id LIMIT 1",
+  );
+  if (!keeper) return 0;
+  const removed = await removeSampleData(db, keeper);
+  console.log(`Removed the sample data (${removed} rows).`);
+  return removed;
+}
+
 // Removes everything "Load sample data" created. Real work that only touches
 // sample people survives: their tasks become unassigned, projects they owned
 // pass to `keeper` (the Head of Company removing the sample).

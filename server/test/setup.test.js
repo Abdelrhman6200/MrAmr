@@ -208,3 +208,15 @@ test('the demo staff accounts are added once, after the Head of Company exists',
   await db.run("DELETE FROM users WHERE email = 'razanomar1515@gmail.com'");
   assert.equal(await addDemoAccounts(db), 0, 'once: a removed account stays removed');
 });
+
+test('removeDemoData takes the sample out and keeps the real Head of Company', async () => {
+  const { removeDemoData, seed, hasSampleData } = await import('../src/seed.js');
+  const ceo = await db.get("SELECT * FROM users WHERE role = 'ceo' ORDER BY id LIMIT 1");
+  await db.tx((tx) => seed(tx, { ceo }));
+  assert.ok(await hasSampleData(db));
+  assert.ok((await removeDemoData(db)) > 0);
+  assert.equal(await hasSampleData(db), false);
+  assert.ok(await db.get('SELECT 1 FROM users WHERE id = ?', [ceo.id]), 'the real account stays');
+  assert.equal(await db.get("SELECT 1 FROM users WHERE email LIKE '%@taskflow.local'"), undefined);
+  assert.equal(await removeDemoData(db), 0, 'nothing left');
+});

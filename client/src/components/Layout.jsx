@@ -21,6 +21,7 @@ const NAV = [
   { to: '/platform', key: 'nav.platform', icon: 'upload', platform: true },
   { to: '/grades', key: 'nav.grades', icon: 'note', grades: true },
   { to: '/sops', key: 'sop.title', icon: 'checklist' },
+  { to: '/guides', key: 'guides.title', icon: 'eye' },
 ];
 
 export function Logo({ size = 28 }) {
