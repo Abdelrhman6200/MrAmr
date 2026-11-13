@@ -19,6 +19,7 @@ export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
   const [meta, setMeta] = useState(null);
   const [users, setUsers] = useState([]);
+  const [reviewers, setReviewers] = useState([]);
   const [booting, setBooting] = useState(true);
   const [bootError, setBootError] = useState(null);
   // Bumped after any mutation so mounted views refetch.
@@ -93,6 +94,8 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     if (user) api.get('/users').then(setUsers).catch(() => {});
+    // Who can review a task: managers only.
+    if (user) api.get('/users/reviewers').then(setReviewers).catch(() => {});
   }, [user, version]);
 
   // Current and upcoming deputies involving this user (see the Team page's Cover tab).
@@ -159,6 +162,7 @@ export function AppProvider({ children }) {
       setUser,
       meta,
       users,
+      reviewers,
       booting,
       bootError,
       retryBoot: boot,
@@ -177,7 +181,7 @@ export function AppProvider({ children }) {
       isUserAdmin: user ? meta?.userAdminRoles.includes(user.role) : false,
       userById: (id) => users.find((u) => u.id === id),
     };
-  }, [user, meta, users, delegations, booting, bootError, boot, version, refresh, logout, notify, toast, lang, setLang]);
+  }, [user, meta, users, reviewers, delegations, booting, bootError, boot, version, refresh, logout, notify, toast, lang, setLang]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

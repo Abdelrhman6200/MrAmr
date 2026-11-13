@@ -95,7 +95,7 @@ export default function Recurring() {
 }
 
 function RecurringForm({ form, setForm, onSubmit }) {
-  const { meta, users, t, priorityLabel } = useApp();
+  const { meta, reviewers, t, priorityLabel } = useApp();
   const [assignable, setAssignable] = useState([]);
   useEffect(() => {
     api.get('/users/assignable').then(setAssignable).catch(() => {});
@@ -121,7 +121,7 @@ function RecurringForm({ form, setForm, onSubmit }) {
         </label>
         <label>
           {t('form.reviewer')}
-          <UserSelect users={users} value={form.reviewer_id} onChange={set('reviewer_id')} placeholder={t('form.noReview')} />
+          <UserSelect users={reviewers} value={form.reviewer_id} onChange={set('reviewer_id')} placeholder={t('form.noReview')} />
         </label>
         <label>
           {t('rec.frequency')}

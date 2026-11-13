@@ -5,7 +5,7 @@ import { Modal, TrackPicker, TypeOptions, UserSelect, typesFor, useSops, useTask
 import { sopSteps } from '../sops.js';
 
 export default function TaskForm() {
-  const { meta, user, refresh, notify, users, t, lang, priorityLabel, statusLabel } = useApp();
+  const { meta, user, refresh, notify, reviewers, t, lang, priorityLabel, statusLabel } = useApp();
   const [sops] = useSops();
   // The checklist follows the type's SOP until someone edits it by hand.
   const [ownChecklist, setOwnChecklist] = useState(false);
@@ -131,7 +131,7 @@ export default function TaskForm() {
           </label>
           <label>
             {t('form.reviewer')} <span className="hint">{t('form.reviewerHint')}</span>
-            <UserSelect users={users} value={form.reviewer_id} onChange={set('reviewer_id')} placeholder={t('form.noReview')} />
+            <UserSelect users={reviewers} value={form.reviewer_id} onChange={set('reviewer_id')} placeholder={t('form.noReview')} />
           </label>
           <label>
             {t('form.status')}

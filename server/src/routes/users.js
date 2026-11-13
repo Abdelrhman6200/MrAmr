@@ -17,11 +17,20 @@ export default function userRoutes({ db, access }) {
 
   const withDept = (u) => ({ ...publicUser(u), department: departmentOf(u.role) });
 
-  // Directory: everyone can see the org chart.
+  // Each person sees their own team alone (see access.visibleIds); the Head of
+  // Company and the Operations Manager see everyone.
   r.get('/', async (req, res) => {
     const rows = await db.all('SELECT * FROM users ORDER BY name');
     const includeInactive = req.query.all === '1' && access.canAdminUsers(req.user);
-    res.json(rows.filter((u) => includeInactive || u.active).map(withDept));
+    const visible = access.visibleIds(req.user);
+    res.json(rows.filter((u) => (includeInactive || u.active) && (includeInactive || visible.has(u.id) || u.id === req.user.id)).map(withDept));
+  });
+
+  // Who can be picked to review a task: managers only, from any team.
+  r.get('/reviewers', async (_req, res) => {
+    const ids = access.reviewerIds();
+    const rows = await db.all('SELECT * FROM users WHERE active = 1 ORDER BY name');
+    res.json(rows.filter((u) => ids.has(u.id)).map(withDept));
   });
 
   r.get('/assignable', async (req, res) => {
@@ -33,7 +42,7 @@ export default function userRoutes({ db, access }) {
 
   r.get('/:id', async (req, res) => {
     const u = await byId(idParam(req.params.id));
-    if (!u) throw notFound('User not found');
+    if (!u || (u.id !== req.user.id && !access.visibleIds(req.user).has(u.id))) throw notFound('User not found');
     res.json({ ...withDept(u), reports: [...access.reportsOf(u.id)], manages: access.managesUser(req.user, u.id) });
   });
 

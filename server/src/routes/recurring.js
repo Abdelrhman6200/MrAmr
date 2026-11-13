@@ -42,6 +42,9 @@ export default function recurringRoutes({ db, access }) {
     if (f.assignee_id !== current.assignee_id && !(await access.assignableIds(user, f.project_id)).has(f.assignee_id)) {
       throw forbidden('You can set recurring work for yourself, your team, project members or a manager');
     }
+    if (f.reviewer_id != null && f.reviewer_id !== current.reviewer_id && !access.reviewerIds().has(f.reviewer_id)) {
+      throw badRequest('Only a manager can review a task');
+    }
     return f;
   }
 

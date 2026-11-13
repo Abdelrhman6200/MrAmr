@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
 import { testDb } from './helpers.js';
 import { DEMO_PASSWORD } from '../src/seed.js';
+import { ROLES } from '../src/meta.js';
 
+let db;
 let server;
 let base;
 const tokens = {};
@@ -32,7 +34,7 @@ const EMAILS = {
 const ids = {};
 
 before(async () => {
-  const db = await testDb();
+  db = await testDb();
   server = createApp({ db, secret: 'test-secret' }).listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}`;
@@ -43,7 +45,10 @@ before(async () => {
   }
 });
 
-after(() => server.close());
+after(async () => {
+  server.close();
+  await db.close();
+});
 
 test('login rejects bad credentials and unauthenticated requests', async () => {
   assert.equal((await api(null, 'POST', '/auth/login', { email: EMAILS.ceo, password: 'nope' })).status, 401);
@@ -87,7 +92,7 @@ test('content review workflow: in_review -> changes -> approve', async () => {
     title: 'Record Lesson 9',
     type: 'content',
     assignee_id: ids.ins1,
-    reviewer_id: ids.cq,
+    reviewer_id: ids.ops,
   });
   assert.equal(created.status, 201);
   const id = created.body.id;
@@ -109,15 +114,15 @@ test('content review workflow: in_review -> changes -> approve', async () => {
   assert.equal((await api('ins1', 'POST', `/tasks/${id}/review`, { decision: 'approve' })).status, 403);
 
   // Reviewer requests changes (needs a comment).
-  assert.equal((await api('cq', 'POST', `/tasks/${id}/review`, { decision: 'changes' })).status, 400);
-  const changes = await api('cq', 'POST', `/tasks/${id}/review`, { decision: 'changes', comment: 'Captions are off by one slide' });
+  assert.equal((await api('ops', 'POST', `/tasks/${id}/review`, { decision: 'changes' })).status, 400);
+  const changes = await api('ops', 'POST', `/tasks/${id}/review`, { decision: 'changes', comment: 'Captions are off by one slide' });
   assert.equal(changes.body.status, 'in_progress');
 
   const notes = (await api('ins1', 'GET', '/notifications')).body.items;
   assert.ok(notes.some((n) => n.type === 'changes_requested' && n.task_id === id));
 
   await api('ins1', 'PATCH', `/tasks/${id}`, { status: 'in_review' });
-  const approved = await api('cq', 'POST', `/tasks/${id}/review`, { decision: 'approve' });
+  const approved = await api('ops', 'POST', `/tasks/${id}/review`, { decision: 'approve' });
   assert.equal(approved.body.status, 'done');
   assert.ok(approved.body.completed_at);
 });
@@ -164,10 +169,50 @@ test('checklist, comments and dashboard', async () => {
 });
 
 test('review comments are written in the reviewer’s language', async () => {
-  const t = (await api('ins1', 'POST', '/tasks', { title: 'Arabic review', reviewer_id: ids.cq, status: 'in_review' })).body;
-  assert.equal((await api('cq', 'PATCH', `/users/${ids.cq}`, { language: 'ar' })).status, 200);
-  assert.equal((await api('cq', 'POST', `/tasks/${t.id}/review`, { decision: 'changes', comment: 'أضف مثالًا' })).status, 200);
+  const t = (await api('ins1', 'POST', '/tasks', { title: 'Arabic review', reviewer_id: ids.ops, status: 'in_review' })).body;
+  assert.equal((await api('ops', 'PATCH', `/users/${ids.ops}`, { language: 'ar' })).status, 200);
+  assert.equal((await api('ops', 'POST', `/tasks/${t.id}/review`, { decision: 'changes', comment: 'أضف مثالًا' })).status, 200);
   const detail = (await api('ins1', 'GET', `/tasks/${t.id}`)).body;
   assert.equal(detail.comments.at(-1).body, '🔁 مطلوب تعديلات: أضف مثالًا');
-  await api('cq', 'PATCH', `/users/${ids.cq}`, { language: 'en' });
+  await api('ops', 'PATCH', `/users/${ids.ops}`, { language: 'en' });
+});
+
+test('only a manager can review a task', async () => {
+  // A team member can't be the reviewer, on a new task or a changed one…
+  assert.equal((await api('hoc', 'POST', '/tasks', { title: 'Peer review', assignee_id: ids.ins1, reviewer_id: ids.cq })).status, 400);
+  const t = (await api('hoc', 'POST', '/tasks', { title: 'Needs a manager', assignee_id: ids.ins1 })).body;
+  const bad = await api('hoc', 'PATCH', `/tasks/${t.id}`, { reviewer_id: ids.ins2 });
+  assert.equal(bad.status, 400);
+  assert.equal(bad.body.error, 'Only a manager can review a task');
+  // …a manager can, in any team.
+  assert.equal((await api('hoc', 'PATCH', `/tasks/${t.id}`, { reviewer_id: ids.ops })).status, 200);
+  // A task that already had a member as its reviewer can still be edited.
+  await db.run('UPDATE tasks SET reviewer_id = ? WHERE id = ?', [ids.cq, t.id]);
+  assert.equal((await api('hoc', 'PATCH', `/tasks/${t.id}`, { priority: 'high' })).status, 200);
+
+  // The pick list is the managers.
+  const list = (await api('ins1', 'GET', '/users/reviewers')).body;
+  assert.ok(list.length >= 5 && list.every((u) => ROLES[u.role].level !== 'member'));
+  assert.ok(list.some((u) => u.id === ids.hoc) && list.some((u) => u.id === ids.ceo) && !list.some((u) => u.id === ids.ins2));
+});
+
+test('each team sees its own team alone; leadership and the Operations Manager see everyone', async () => {
+  const everyone = (await api('ceo', 'GET', '/users')).body;
+  assert.ok(everyone.some((u) => u.role === 'cs_head') && everyone.some((u) => u.role === 'instructor') && everyone.some((u) => u.role === 'product_owner'));
+  assert.equal((await api('ops', 'GET', '/users')).body.length, everyone.length);
+
+  const dept = (people, d) => people.every((u) => u.department === d);
+  const mine = (await api('ins1', 'GET', '/users')).body;
+  assert.ok(mine.length >= 4 && dept(mine, 'content'), 'an instructor sees the content team only');
+  assert.ok(mine.some((u) => u.id === ids.hoc) && mine.some((u) => u.id === ids.ins2));
+  const cs = (await api('cs1', 'GET', '/users')).body;
+  assert.ok(cs.length >= 4 && dept(cs, 'customer_service'));
+  const mkt = (await api('mkt1', 'GET', '/users')).body;
+  assert.ok(dept(mkt, 'marketing'));
+
+  // A person's page is the same: another team's member isn't found, your own team's is.
+  assert.equal((await api('ins1', 'GET', `/users/${ids.cs1}`)).status, 404);
+  assert.equal((await api('ins1', 'GET', `/users/${ids.ins2}`)).status, 200);
+  assert.equal((await api('ins1', 'GET', `/users/${ids.ins1}`)).status, 200);
+  assert.equal((await api('ceo', 'GET', `/users/${ids.cs1}`)).status, 200);
 });

@@ -1,6 +1,6 @@
 import express, { Router } from 'express';
 import { HttpError, badRequest, forbidden, idParam, notFound, oneOf, optionalDate, optionalId, requiredString } from '../http.js';
-import { PRIORITIES, ROLES, STATUSES, TASK_TYPES, TRACKS, keys } from '../meta.js';
+import { PRIORITIES, ROLES, STATUSES, TASK_TYPES, TRACKS, isManagerRole, keys } from '../meta.js';
 import { localDate, nowUtc } from '../time.js';
 import { translate } from '../../../client/src/i18n.js';
 import { stepsFor } from './sops.js';
@@ -61,7 +61,7 @@ function estimate(value) {
 
 export default function taskRoutes({ db, access }) {
   const r = Router();
-  const userById = (id, q = db) => q.get('SELECT id, name, active FROM users WHERE id = ?', [id]);
+  const userById = (id, q = db) => q.get('SELECT id, name, role, active FROM users WHERE id = ?', [id]);
   const projectById = (id, q = db) => q.get('SELECT * FROM projects WHERE id = ?', [id]);
 
   // These take the transaction they run in.
@@ -129,6 +129,7 @@ export default function taskRoutes({ db, access }) {
     if (reviewerId == null) return;
     const u = await userById(reviewerId);
     if (!u || !u.active) throw badRequest('Reviewer not found');
+    if (!isManagerRole(u.role)) throw badRequest('Only a manager can review a task');
   }
 
   async function checkProject(user, projectId) {
@@ -381,7 +382,8 @@ export default function taskRoutes({ db, access }) {
       if (f.reviewer_id !== t.reviewer_id && !(await access.canChangeReviewer(req.user, t))) {
         throw forbidden('Only the task creator, the reviewer or a manager can change who reviews this task');
       }
-      await checkReviewer(f.reviewer_id);
+      // Only a change is checked: a task made before this rule keeps its reviewer.
+      if (f.reviewer_id !== t.reviewer_id) await checkReviewer(f.reviewer_id);
     }
     const reviewerId = f.reviewer_id !== undefined ? f.reviewer_id : t.reviewer_id;
     // Finishing is judged against the reviewer the task had before this edit, so a

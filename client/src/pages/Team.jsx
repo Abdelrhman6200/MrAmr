@@ -64,7 +64,7 @@ export default function Team() {
       <div className="page-head">
         <div>
           <h1>{t('team.title')}</h1>
-          <p className="muted">{t('team.summary', { people: users.length, depts: Object.keys(meta.departments).length })}</p>
+          <p className="muted">{t('team.summary', { people: users.length, depts: new Set(users.map((u) => deptOf(u.role))).size })}</p>
         </div>
         <div className="seg">
           <button className={mode === 'chart' ? 'active' : ''} onClick={() => setMode('chart')}>

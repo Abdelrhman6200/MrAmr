@@ -98,7 +98,7 @@ function ReviewBox({ task, onDone }) {
 }
 
 export default function TaskDetail({ id }) {
-  const { meta, refresh, version, notify, users, user, t, lang, statusLabel, priorityLabel } = useApp();
+  const { meta, refresh, version, notify, users, reviewers, user, t, lang, statusLabel, priorityLabel } = useApp();
   const [sops] = useSops();
   const { close } = useTaskDialog();
   const [task, setTask] = useState(null);
@@ -181,6 +181,11 @@ export default function TaskDetail({ id }) {
   const ro = !task.can_edit;
   // Include the current assignee even if they're outside the assignable set.
   const assigneeOptions = assignable.some((u) => u.id === task.assignee_id) || !task.assignee_id ? assignable : [...assignable, users.find((u) => u.id === task.assignee_id)].filter(Boolean);
+  // Only managers review; a task made before that rule keeps its current reviewer.
+  const reviewerOptions =
+    !task.reviewer_id || reviewers.some((u) => u.id === task.reviewer_id)
+      ? reviewers
+      : [...reviewers, { id: task.reviewer_id, name: task.reviewer_name, role: users.find((u) => u.id === task.reviewer_id)?.role }];
   const statusOptions = meta.statuses.filter((s) => !(s.key === 'done' && task.reviewer_id && !task.can_review && task.status !== 'done'));
 
   return (
@@ -359,7 +364,7 @@ export default function TaskDetail({ id }) {
             <UserSelect users={assigneeOptions} value={task.assignee_id} disabled={ro} onChange={(v) => update({ assignee_id: v })} />
           </Field>
           <Field label={t('form.reviewer')}>
-            <UserSelect users={users} value={task.reviewer_id} disabled={ro || !task.can_change_reviewer} placeholder={t('form.noReview')} onChange={(v) => update({ reviewer_id: v })} />
+            <UserSelect users={reviewerOptions} value={task.reviewer_id} disabled={ro || !task.can_change_reviewer} placeholder={t('form.noReview')} onChange={(v) => update({ reviewer_id: v })} />
           </Field>
           <Field label={t('form.priority')}>
             <select value={task.priority} disabled={ro} onChange={(e) => update({ priority: e.target.value })}>

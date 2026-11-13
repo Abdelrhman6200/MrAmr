@@ -50,7 +50,7 @@ before(async () => {
 after(() => server.close());
 
 test('#1 the assignee cannot skip review by removing the reviewer', async () => {
-  const task = (await api('hoc', 'POST', '/tasks', { title: 'Lesson needing QA', assignee_id: ids.ins1, reviewer_id: ids.cq })).body;
+  const task = (await api('hoc', 'POST', '/tasks', { title: 'Lesson needing QA', assignee_id: ids.ins1, reviewer_id: ids.ops })).body;
   // In one request…
   const oneStep = await api('ins1', 'PATCH', `/tasks/${task.id}`, { reviewer_id: null, status: 'done' });
   assert.notEqual(oneStep.status, 200);
@@ -58,7 +58,7 @@ test('#1 the assignee cannot skip review by removing the reviewer', async () => 
   assert.equal((await api('ins1', 'PATCH', `/tasks/${task.id}`, { reviewer_id: null })).status, 403);
   const after = (await api('hoc', 'GET', `/tasks/${task.id}`)).body;
   assert.equal(after.status, 'todo');
-  assert.equal(after.reviewer_id, ids.cq);
+  assert.equal(after.reviewer_id, ids.ops);
   assert.equal(after.can_change_reviewer, true);
   assert.equal((await api('ins1', 'GET', `/tasks/${task.id}`)).body.can_change_reviewer, false);
   // The person who set up the review (or a manager) may still change it.
@@ -66,10 +66,10 @@ test('#1 the assignee cannot skip review by removing the reviewer', async () => 
   // Anyone who can edit may ask for a review on a task that has none.
   const plain = (await api('hoc', 'POST', '/tasks', { title: 'No reviewer yet', assignee_id: ids.ins1 })).body;
   assert.equal((await api('ins1', 'GET', `/tasks/${plain.id}`)).body.can_change_reviewer, true);
-  assert.equal((await api('ins1', 'PATCH', `/tasks/${plain.id}`, { reviewer_id: ids.cq, status: 'in_review' })).status, 200);
+  assert.equal((await api('ins1', 'PATCH', `/tasks/${plain.id}`, { reviewer_id: ids.ops, status: 'in_review' })).status, 200);
   assert.equal((await api('ins1', 'PATCH', `/tasks/${plain.id}`, { reviewer_id: null })).status, 403);
   // Someone reviewing their own task (they created it) can still drop the reviewer.
-  const own = (await api('ins1', 'POST', '/tasks', { title: 'My own', reviewer_id: ids.cq })).body;
+  const own = (await api('ins1', 'POST', '/tasks', { title: 'My own', reviewer_id: ids.ops })).body;
   assert.equal((await api('ins1', 'PATCH', `/tasks/${own.id}`, { reviewer_id: null })).status, 200);
 });
 

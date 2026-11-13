@@ -167,7 +167,7 @@ function Schedule({ tasks }) {
 
 // Turns a content plan (one item per line) into upload tasks spread over the weeks.
 function PlanUploads({ onClose }) {
-  const { user, users, t, typeLabel, notify, refresh } = useApp();
+  const { user, reviewers, t, typeLabel, notify, refresh } = useApp();
   const [projects, setProjects] = useState([]);
   const [assignable, setAssignable] = useState([]);
   const [form, setForm] = useState({ project_id: null, type: 'content_upload', assignee_id: user.id, reviewer_id: null, track: '', items: '', first: todayISO(), every: 7 });
@@ -236,7 +236,7 @@ function PlanUploads({ onClose }) {
           </label>
           <label>
             {t('form.reviewer')}
-            <UserSelect users={users} value={form.reviewer_id} onChange={set('reviewer_id')} placeholder={t('form.noReview')} />
+            <UserSelect users={reviewers} value={form.reviewer_id} onChange={set('reviewer_id')} placeholder={t('form.noReview')} />
           </label>
           <div className="grid-2">
             <label>

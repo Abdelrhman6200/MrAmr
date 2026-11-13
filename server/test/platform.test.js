@@ -59,7 +59,8 @@ test('a content plan becomes one upload task per item, each with the SOP', async
   assert.equal((await po.call('POST', '/tasks/batch', { items: [] })).status, 400);
   assert.equal((await po.call('POST', '/tasks/batch', { items: [{ title: 'x', due_date: 'soon' }] })).status, 400);
   // The same assignment rules as single tasks.
-  const ins = (await po.call('GET', '/users')).body.find((u) => u.email === 'instructor2@taskflow.local');
+  const ceo = await signIn('ceo@taskflow.local');
+  const ins = (await ceo.call('GET', '/users')).body.find((u) => u.email === 'instructor2@taskflow.local');
   assert.equal((await plat.call('POST', '/tasks/batch', { assignee_id: ins.id, items: [{ title: 'x' }] })).status, 403);
 });
 

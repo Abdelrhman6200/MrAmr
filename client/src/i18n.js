@@ -1952,6 +1952,7 @@ const arErrors = {
   'Internal server error': 'حدث خطأ في الخادم',
   'The server took too long to answer. Please try again.': 'استغرق الخادم وقتًا طويلًا للرد. حاول مرة أخرى.',
   'Could not reach the server. Check your connection and try again.': 'تعذّر الوصول للخادم. اتأكد من الإنترنت وحاول تاني.',
+  'Only a manager can review a task': 'المدير بس هو اللي يقدر يراجع المهمة',
   'Invalid email or password': 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
   'Not authenticated': 'يرجى تسجيل الدخول',
   'You do not have permission to do that': 'ليست لديك صلاحية لذلك',

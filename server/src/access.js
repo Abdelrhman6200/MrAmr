@@ -6,10 +6,14 @@
 //   they own or are a member of.
 // - Tasks can be assigned to yourself, your reporting line, or any manager
 //   (so e.g. Customer Service can raise a bug with the Product Owner).
+// - People lists and the org chart show a team alone: your department, your
+//   reporting line and anyone you cover for. Leadership and the Operations
+//   Manager (who run the accounts) see everyone.
+// - Only a manager can review a task (see reviewerIds).
 // - A deputy acting for a manager (a delegation covering today) also has that
 //   manager's reporting line and reviews, as if it were their own.
 import { bump, readCounter } from './db.js';
-import { isManagerRole, USER_ADMIN_ROLES } from './meta.js';
+import { departmentOf, isManagerRole, USER_ADMIN_ROLES } from './meta.js';
 import { localDate } from './time.js';
 
 export const isCeo = (user) => user.role === 'ceo';
@@ -204,6 +208,19 @@ export function makeAccess(db) {
 
   const canAdminUsers = (user) => USER_ADMIN_ROLES.includes(user.role);
 
+  // The people `user` can see in lists and the org chart: their own team alone.
+  function visibleIds(user) {
+    const rows = chart().rows.filter((r) => r.active);
+    if (isCeo(user) || canAdminUsers(user)) return new Set(rows.map((r) => r.id));
+    const dept = departmentOf(user.role);
+    const ids = new Set(rows.filter((r) => departmentOf(r.role) === dept).map((r) => r.id));
+    for (const id of teamIds(user)) ids.add(id);
+    return new Set([...ids].filter((id) => rows.some((r) => r.id === id)));
+  }
+
+  // Who can review a task: managers (managers, team leaders and the Head of Company).
+  const reviewerIds = () => new Set(chart().rows.filter((r) => r.active && isManagerRole(r.role)).map((r) => r.id));
+
   return {
     sync,
     invalidate,
@@ -227,5 +244,7 @@ export function makeAccess(db) {
     canChangeReviewer,
     assignableIds,
     canAdminUsers,
+    visibleIds,
+    reviewerIds,
   };
 }
